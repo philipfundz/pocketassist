@@ -339,7 +339,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await incrementDailyCount(phone);
-      await handleStickerCreator(phone, mediaUrl, sendMessage, sendSticker);
+      await handleStickerCreator(phone, mediaUrl, sendMessage, sendSticker, sendImage);
       return;
     }
 

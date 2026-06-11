@@ -20,17 +20,16 @@ const getAIToolsMenu = () => `🧠 *AI Tools*
 const getFileToolsMenu = () => `📁 *File Tools*
 ━━━━━━━━━━━━━━
 1️⃣ OCR — Extract text from image
-2️⃣ Convert file ⚙️
+2️⃣ File Converter
 3️⃣ Voice Transcriber
 4️⃣ URL Shortener
 5️⃣ QR Code Generator
 6️⃣ Web Reader
-7️⃣ PDF Tools 💎
-8️⃣ Watermark 💎
-9️⃣ E-Sign 💎
-🔟 Sticker Creator 💎
-1️⃣1️⃣ Social Downloader 💎
-1️⃣2️⃣ WhatsApp Link Generator
+7️⃣ Watermark 💎
+8️⃣ E-Sign 💎
+9️⃣ Sticker Creator 💎
+🔟 Social Downloader 💎
+1️⃣1️⃣ WhatsApp Link Generator
 💎 = Premium only
 0️⃣ Back to Main Menu`;
 
@@ -63,14 +62,14 @@ const getHelpMessage = () => `❓ *PocketAssist Help*
 *Examples:*
 - "What is photosynthesis?" → AI Q&A
 - Send image → OCR text extraction
-- Translate: 2-step flow
+- Send file → File Converter
 
 *Support:* Contact us on WhatsApp
 *Version:* PocketAssist v1.0 🚀`;
 
 const getPremiumMessage = () => `⭐ *Upgrade to Premium*
 ━━━━━━━━━━━━━━
-Unlock *18 powerful tools*
+Unlock powerful premium tools!
 
 💰 *Pricing:*
 - ₦1,000/month
@@ -83,7 +82,7 @@ Unlock *18 powerful tools*
 ✅ Assignment Writer
 ✅ Past Question Solver
 ✅ Social Downloader
-✅ PDF Tools & more!
+✅ Watermark, E-Sign & more!
 
 _(Monnify payment coming soon)_
 Type *BACK* to return to menu`;
