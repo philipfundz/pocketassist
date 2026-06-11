@@ -21,6 +21,8 @@
     "form-data": "^4.0.5",
     "groq-sdk": "^1.2.1",
     "multer": "^2.1.1",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
     "sharp": "^0.34.5",
     "tesseract.js": "^7.0.0",
     "uuid": "^14.0.0",

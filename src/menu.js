@@ -20,8 +20,8 @@ const getAIToolsMenu = () => `🧠 *AI Tools*
 const getFileToolsMenu = () => `📁 *File Tools*
 ━━━━━━━━━━━━━━
 1️⃣ OCR — Extract text from image
-2️⃣ Convert file
-3️⃣ Voice transcriber
+2️⃣ Convert file ⚙️
+3️⃣ Voice Transcriber
 4️⃣ URL Shortener
 5️⃣ QR Code Generator
 6️⃣ Web Reader
@@ -30,6 +30,7 @@ const getFileToolsMenu = () => `📁 *File Tools*
 9️⃣ E-Sign 💎
 🔟 Sticker Creator 💎
 1️⃣1️⃣ Social Downloader 💎
+1️⃣2️⃣ WhatsApp Link Generator
 💎 = Premium only
 0️⃣ Back to Main Menu`;
 
@@ -45,12 +46,10 @@ const getStudentToolsMenu = () => `🎓 *Student Tools*
 
 const getAccountMenu = (user, remainingFree) => `👤 *My Account*
 ━━━━━━━━━━━━━━
-🆔 Pocket ID: *${user.pocket_id}*
-⭐ Status: *${user.is_premium ? 'PREMIUM ✅' : 'FREE'}*
-📈 Usage today: *${user.daily_count}/9*
-🔄 Remaining: *${remainingFree}*
-📅 Member since: *${new Date(user.created_at).toLocaleDateString('en-NG')}*
-${user.is_premium ? '✅ Unlimited access active!' : '1️⃣ Upgrade to Premium\n\n💡 Type PREMIUM to subscribe'}
+🆔 Pocket ID: *${user?.pocket_id || 'N/A'}*
+📊 Free uses left today: *${remainingFree}*
+⭐ Status: *${user?.is_premium ? 'Premium ✅' : 'Free'}*
+💡 Type *PREMIUM* to upgrade
 0️⃣ Back to Main Menu`;
 
 const getHelpMessage = () => `❓ *PocketAssist Help*
@@ -59,24 +58,33 @@ const getHelpMessage = () => `❓ *PocketAssist Help*
 - *MENU* — Main menu
 - *STATS* — Your usage
 - *PREMIUM* — Upgrade
+- *0* or *BACK* — Go back
+
 *Examples:*
 - "What is photosynthesis?" → AI Q&A
-- Send image → OCR
-- "Translate hello to Igbo"
+- Send image → OCR text extraction
+- Translate: 2-step flow
+
 *Support:* Contact us on WhatsApp
 *Version:* PocketAssist v1.0 🚀`;
 
 const getPremiumMessage = () => `⭐ *Upgrade to Premium*
 ━━━━━━━━━━━━━━
 Unlock *18 powerful tools*
+
 💰 *Pricing:*
 - ₦1,000/month
 - ₦5,000/year *(5 months free!)*
+
 *Premium tools include:*
+✅ Translator
+✅ Caption Generator
 ✅ CV Builder
 ✅ Assignment Writer
 ✅ Past Question Solver
+✅ Social Downloader
 ✅ PDF Tools & more!
+
 _(Monnify payment coming soon)_
 Type *BACK* to return to menu`;
 

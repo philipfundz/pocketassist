@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const fs = require('fs');
+const FormData = require('form-data');
 const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
 const { onboardingFlow } = require('./src/onboarding');
@@ -14,7 +16,45 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
 
-// ─── SEND FUNCTIONS ──────────────────────────────────────
+// ─── GLOBAL REQUEST QUEUE ─────────────────────────────────────────────────────
+// Max 2 heavy tasks running at the same time on Render free tier
+const MAX_CONCURRENT = 2;
+let activeJobs = 0;
+const jobQueue = [];
+
+// Heavy tools that must go through the queue
+const HEAVY_STEPS = [
+  'socialdl',
+  'convert_format',
+  'watermark',
+  'esign_sig',
+  'voice',
+  'web',
+  'ocr',
+  'rewrite',
+];
+
+const isHeavyStep = (step) => HEAVY_STEPS.includes(step);
+
+const processQueue = () => {
+  if (jobQueue.length === 0 || activeJobs >= MAX_CONCURRENT) return;
+  const next = jobQueue.shift();
+  activeJobs++;
+  next.run().finally(() => {
+    activeJobs--;
+    processQueue(); // process next in queue
+  });
+};
+
+const enqueueJob = (phone, run, sendMessage, position) => {
+  if (position > 0) {
+    sendMessage(phone, `⏳ *You're in queue (position ${position})*\n\nA heavy task is running ahead of you.\nYour request will be processed shortly...`);
+  }
+  jobQueue.push({ run });
+  processQueue();
+};
+
+// ─── SEND FUNCTIONS ───────────────────────────────────────────────────────────
 
 const sendMessage = async (phone, text) => {
   await axios.post(
@@ -29,22 +69,33 @@ const sendMessage = async (phone, text) => {
   );
 };
 
-const sendImage = async (phone, imageUrl, caption = '') => {
+const sendImage = async (phone, imagePath, caption = '') => {
+  const form = new FormData();
+  form.append('file', fs.createReadStream(imagePath));
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'image/png');
+
+  const uploadRes = await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+    form,
+    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+
+  const mediaId = uploadRes.data.id;
+
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: 'whatsapp',
       to: phone,
       type: 'image',
-      image: { link: imageUrl, caption }
+      image: { id: mediaId, caption }
     },
     { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
   );
 };
 
 const sendVideo = async (phone, videoPath, caption = '') => {
-  const fs = require('fs');
-  const FormData = require('form-data');
   const form = new FormData();
   form.append('file', fs.createReadStream(videoPath));
   form.append('messaging_product', 'whatsapp');
@@ -70,6 +121,58 @@ const sendVideo = async (phone, videoPath, caption = '') => {
   );
 };
 
+const sendDocument = async (phone, filePath, filename, caption = '') => {
+  const form = new FormData();
+  form.append('file', fs.createReadStream(filePath), filename);
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'application/octet-stream');
+
+  const uploadRes = await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+    form,
+    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+
+  const mediaId = uploadRes.data.id;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'document',
+      document: { id: mediaId, filename, caption }
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+};
+
+const sendSticker = async (phone, stickerPath) => {
+  const form = new FormData();
+  form.append('file', fs.createReadStream(stickerPath));
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'image/webp');
+
+  const uploadRes = await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+    form,
+    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+
+  const mediaId = uploadRes.data.id;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'sticker',
+      sticker: { id: mediaId }
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+};
+
 // Get WhatsApp media URL from media ID
 const getMediaUrl = async (mediaId) => {
   const res = await axios.get(
@@ -79,7 +182,7 @@ const getMediaUrl = async (mediaId) => {
   return res.data.url;
 };
 
-// ─── WEBHOOK VERIFICATION ────────────────────────────────
+// ─── WEBHOOK VERIFICATION ─────────────────────────────────────────────────────
 
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -93,7 +196,7 @@ app.get('/webhook', (req, res) => {
   return res.sendStatus(403);
 });
 
-// ─── WEBHOOK MESSAGE HANDLER ─────────────────────────────
+// ─── WEBHOOK MESSAGE HANDLER ──────────────────────────────────────────────────
 
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200); // Always respond immediately to Meta
@@ -114,7 +217,6 @@ app.post('/webhook', async (req, res) => {
     let mediaUrl = null;
     let mediaType = null;
 
-    // Extract message content
     if (msgType === 'text') {
       text = msg.text?.body || '';
     } else if (msgType === 'image') {
@@ -124,10 +226,13 @@ app.post('/webhook', async (req, res) => {
       mediaType = 'audio';
       mediaUrl = await getMediaUrl(msg.audio.id);
     } else if (msgType === 'document') {
-      mediaType = 'document';
+      mediaType = msg.document.mime_type || 'document';
       mediaUrl = await getMediaUrl(msg.document.id);
+    } else if (msgType === 'video') {
+      mediaType = 'video';
+      mediaUrl = await getMediaUrl(msg.video.id);
     } else {
-      return; // Ignore other message types for now
+      return;
     }
 
     // Get or create user
@@ -139,8 +244,8 @@ app.post('/webhook', async (req, res) => {
     const isNewUser = await onboardingFlow(user, text, sendMessage);
     if (isNewUser) return;
 
-    // Route to handler
-    await handleMessage(
+    // Build the job function
+    const job = () => handleMessage(
       phone,
       text,
       mediaUrl,
@@ -148,22 +253,45 @@ app.post('/webhook', async (req, res) => {
       sendMessage,
       sendImage,
       sendVideo,
+      sendDocument,
+      sendSticker,
       user,
       access
     );
+
+    // Check if this is a heavy step that needs queuing
+    // We peek at session step via a lightweight session check
+    const { getSessionStep } = require('./src/handlers');
+    const currentStep = getSessionStep(phone);
+
+    if (isHeavyStep(currentStep) && activeJobs >= MAX_CONCURRENT) {
+      // Queue it and notify user of position
+      const position = jobQueue.length + 1;
+      enqueueJob(phone, job, sendMessage, position);
+    } else if (isHeavyStep(currentStep)) {
+      // Slot available — run immediately but still track it
+      activeJobs++;
+      job().finally(() => {
+        activeJobs--;
+        processQueue();
+      });
+    } else {
+      // Light task — run immediately, no queue
+      job();
+    }
 
   } catch (err) {
     console.error('Webhook error:', err.message);
   }
 });
 
-// ─── HEALTH CHECK ────────────────────────────────────────
+// ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.send('🤖 PocketAssist is running!');
+  res.send(`🤖 PocketAssist is running! | Active jobs: ${activeJobs} | Queued: ${jobQueue.length}`);
 });
 
-// ─── START SERVER ─────────────────────────────────────────
+// ─── START SERVER ─────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`🚀 PocketAssist running on port ${PORT}`);
