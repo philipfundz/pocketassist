@@ -120,48 +120,81 @@ const handleURLShortener = async (phone, url, sendMessage) => {
   }
 };
 
-// ─── QR CODE GENERATOR (with PA logo) ───────────────────────────────────────
+// ─── QR CODE GENERATOR (SVG logo in center) ──────────────────────────────────
 const handleQRCode = async (phone, text, sendMessage, sendImage) => {
   await sendMessage(phone, '📱 Generating your QR code...');
   let qrPath, finalQrPath;
   try {
     const QRCode = require('qrcode');
+    const qrSize = 600;
 
     qrPath = path.join(TEMP_DIR, `${uuidv4()}_qr.png`);
 
     await QRCode.toFile(qrPath, text.trim(), {
       errorCorrectionLevel: 'H',
       type: 'png',
-      width: 600,
+      width: qrSize,
       margin: 2,
       color: {
-        dark: '#1a1a2e',
+        dark: '#111111',
         light: '#ffffff',
       },
     });
 
-    if (fs.existsSync(LOGO_PATH)) {
-      const qrSize = 600;
-      const logoSize = 120;
-      const logoPosition = Math.floor((qrSize - logoSize) / 2);
+    // Draw white circle + dark rounded square + PA⚡ text using SVG
+    const circleSize = 130;
+    const circlePos = Math.floor((qrSize - circleSize) / 2);
 
-      const logoPadded = await sharp(LOGO_PATH)
-        .resize(logoSize, logoSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
-        .extend({ top: 8, bottom: 8, left: 8, right: 8, background: { r: 255, g: 255, b: 255, alpha: 1 } })
-        .toBuffer();
+    const svgOverlay = Buffer.from(`
+      <svg width="${qrSize}" height="${qrSize}" xmlns="http://www.w3.org/2000/svg">
+        <!-- White circle background -->
+        <circle
+          cx="${qrSize / 2}"
+          cy="${qrSize / 2}"
+          r="68"
+          fill="white"
+          filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.15))"
+        />
+        <!-- Dark rounded square -->
+        <rect
+          x="${qrSize / 2 - 38}"
+          y="${qrSize / 2 - 38}"
+          width="76"
+          height="76"
+          rx="16"
+          ry="16"
+          fill="#111111"
+        />
+        <!-- PA text -->
+        <text
+          x="${qrSize / 2 - 4}"
+          y="${qrSize / 2 + 8}"
+          font-family="Arial, sans-serif"
+          font-size="24"
+          font-weight="bold"
+          fill="white"
+          text-anchor="middle"
+        >PA</text>
+        <!-- Lightning bolt -->
+        <text
+          x="${qrSize / 2 + 18}"
+          y="${qrSize / 2 + 22}"
+          font-family="Arial, sans-serif"
+          font-size="14"
+          fill="white"
+          text-anchor="middle"
+        >⚡</text>
+      </svg>
+    `);
 
-      finalQrPath = path.join(TEMP_DIR, `${uuidv4()}_qr_final.png`);
+    finalQrPath = path.join(TEMP_DIR, `${uuidv4()}_qr_final.png`);
 
-      await sharp(qrPath)
-        .composite([{ input: logoPadded, top: logoPosition - 8, left: logoPosition - 8 }])
-        .toFile(finalQrPath);
+    await sharp(qrPath)
+      .composite([{ input: svgOverlay, blend: 'over' }])
+      .toFile(finalQrPath);
 
-      cleanup(qrPath);
-      qrPath = null;
-    } else {
-      finalQrPath = qrPath;
-      qrPath = null;
-    }
+    cleanup(qrPath);
+    qrPath = null;
 
     await sendImage(phone, finalQrPath, `📱 *QR Code Generated!*\n\n_Content:_ ${text.trim().substring(0, 50)}${text.length > 50 ? '...' : ''}`);
     return sendMessage(phone, 'Type *0* to go back or send another text for a new QR code.');
