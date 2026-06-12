@@ -290,6 +290,14 @@ app.post('/webhook', async (req, res) => {
 app.get('/', (req, res) => {
   res.send(`🤖 PocketAssist is running! | Active jobs: ${activeJobs} | Queued: ${jobQueue.length}`);
 });
+app.get('/privacy', (req, res) => {
+  res.send(`
+    <h1>PocketAssist Privacy Policy</h1>
+    <p>PocketAssist collects only your WhatsApp phone number to provide bot services.</p>
+    <p>We do not share your data with third parties.</p>
+    <p>Contact: pocketassistng@gmail.com</p>
+  `);
+});
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
 
