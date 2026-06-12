@@ -170,25 +170,16 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
           ry="22"
           fill="#111111"
         />
-        <!-- PA text -->
+        <!-- PA⚡ text on same line -->
         <text
-          x="${qrSize / 2 - 8}"
-          y="${qrSize / 2 + 10}"
+          x="${qrSize / 2}"
+          y="${qrSize / 2 + 12}"
           font-family="Arial, sans-serif"
-          font-size="32"
+          font-size="28"
           font-weight="bold"
           fill="white"
           text-anchor="middle"
-        >PA</text>
-        <!-- Lightning bolt -->
-        <text
-          x="${qrSize / 2 + 26}"
-          y="${qrSize / 2 + 28}"
-          font-family="Arial, sans-serif"
-          font-size="18"
-          fill="white"
-          text-anchor="middle"
-        >⚡</text>
+        >PA⚡</text>
       </svg>
     `);
     
