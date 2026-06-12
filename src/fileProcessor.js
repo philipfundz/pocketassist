@@ -147,46 +147,51 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
 
     const svgOverlay = Buffer.from(`
       <svg width="${qrSize}" height="${qrSize}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.25)"/>
+          </filter>
+        </defs>
         <!-- White circle background -->
         <circle
           cx="${qrSize / 2}"
           cy="${qrSize / 2}"
-          r="68"
+          r="90"
           fill="white"
-          filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.15))"
+          filter="url(#shadow)"
         />
         <!-- Dark rounded square -->
         <rect
-          x="${qrSize / 2 - 38}"
-          y="${qrSize / 2 - 38}"
-          width="76"
-          height="76"
-          rx="16"
-          ry="16"
+          x="${qrSize / 2 - 52}"
+          y="${qrSize / 2 - 52}"
+          width="104"
+          height="104"
+          rx="22"
+          ry="22"
           fill="#111111"
         />
         <!-- PA text -->
         <text
-          x="${qrSize / 2 - 4}"
-          y="${qrSize / 2 + 8}"
+          x="${qrSize / 2 - 8}"
+          y="${qrSize / 2 + 10}"
           font-family="Arial, sans-serif"
-          font-size="24"
+          font-size="32"
           font-weight="bold"
           fill="white"
           text-anchor="middle"
         >PA</text>
         <!-- Lightning bolt -->
         <text
-          x="${qrSize / 2 + 18}"
-          y="${qrSize / 2 + 22}"
+          x="${qrSize / 2 + 26}"
+          y="${qrSize / 2 + 28}"
           font-family="Arial, sans-serif"
-          font-size="14"
+          font-size="18"
           fill="white"
           text-anchor="middle"
         >⚡</text>
       </svg>
     `);
-
+    
     finalQrPath = path.join(TEMP_DIR, `${uuidv4()}_qr_final.png`);
 
     await sharp(qrPath)
