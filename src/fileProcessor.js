@@ -398,8 +398,8 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     // Step 3: Wait for job to finish (poll)
     let exportTask = null;
     let statusRes;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 3000));
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 5000));
       statusRes = await axios.get(`https://api.cloudconvert.com/v2/jobs/${job.id}`, {
         headers: { Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}` }
       });
