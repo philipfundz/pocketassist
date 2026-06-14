@@ -248,11 +248,38 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 };
 
 // ─── SOCIAL DOWNLOADER (yt-dlp + ffmpeg compress) ───────────────────────────
+
+// Fix 1: Per-user active download tracker
+const activeDownloads = new Set();
+
 const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
+
+  // Fix 1: Reject if user already has an active download
+  if (activeDownloads.has(phone)) {
+    return sendMessage(phone, '⏳ You already have a download in progress. Please wait for it to finish.\n\nType *0* to go back.');
+  }
+
+  // Fix 5: Mark slot as taken
+  activeDownloads.add(phone);
+
   await sendMessage(phone, '⬇️ Downloading... please wait');
   let outputPath, compressedPath;
+
   try {
     const ytDlp = require('yt-dlp-exec');
+
+    // Fix 2: Pre-download duration check
+    const info = await ytDlp(url.trim(), {
+      dumpSingleJson: true,
+      noPlaylist: true,
+      noCheckCertificates: true,
+    });
+
+    const duration = info.duration; // in seconds
+    if (duration && duration > 300) {
+      return sendMessage(phone, '❌ Video is too long (over 5 minutes).\n\nPlease send a shorter clip.\n\nType *0* to go back.');
+    }
+
     outputPath = path.join(TEMP_DIR, `${uuidv4()}.mp4`);
 
     await ytDlp(url.trim(), {
@@ -275,8 +302,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       await sendMessage(phone, '⚙️ Compressing video...');
       compressedPath = path.join(TEMP_DIR, `${uuidv4()}_compressed.mp4`);
 
+      // Fix 3: ffmpeg 45s timeout
       await new Promise((resolve, reject) => {
-        ffmpeg(outputPath)
+        const ff = ffmpeg(outputPath)
           .outputOptions([
             '-vcodec libx264',
             '-crf 28',
@@ -289,6 +317,11 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
           .on('end', resolve)
           .on('error', reject)
           .run();
+
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error('ffmpeg timeout'));
+        }, 45000);
       });
 
       const compressedStats = fs.statSync(compressedPath);
@@ -302,15 +335,27 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
     await sendVideo(phone, finalPath, '🎬 Here is your downloaded video!');
     return sendMessage(phone, 'Type *0* to go back or paste another link.');
+
   } catch (err) {
     console.error('Social DL error:', err.message);
-    const msg = err.message.includes('not supported') || err.message.includes('Unsupported')
-      ? '❌ This link is not supported.\n\nSupported: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook'
-      : '❌ Download failed. Check the link and try again.\n\nType *0* to go back.';
-    return sendMessage(phone, msg);
-  } finally {
+
+    // Fix 4: Cleanup only this user's temp files
     cleanup(outputPath);
     cleanup(compressedPath);
+
+    const msg = err.message === 'ffmpeg timeout'
+      ? '❌ Compression timed out. Try a shorter or smaller video.\n\nType *0* to go back.'
+      : err.message.includes('not supported') || err.message.includes('Unsupported')
+        ? '❌ This link is not supported.\n\nSupported: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook'
+        : '❌ Download failed. Check the link and try again.\n\nType *0* to go back.';
+
+    return sendMessage(phone, msg);
+
+  } finally {
+    // Fix 4 + 5: Always cleanup and always release slot
+    cleanup(outputPath);
+    cleanup(compressedPath);
+    activeDownloads.delete(phone); // Fix 5
   }
 };
 
