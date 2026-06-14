@@ -220,8 +220,11 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument);
-      resetToSubmenu(phone, 'file');
+      try {
+        await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument);
+      } finally {
+        resetToSubmenu(phone, 'file');
+      }
       return;
     }
 
