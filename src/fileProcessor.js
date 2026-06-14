@@ -397,15 +397,22 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
 
     // Step 3: Wait for job to finish (poll)
     let exportTask = null;
+    let statusRes;
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 3000));
-      const statusRes = await axios.get(`https://api.cloudconvert.com/v2/jobs/${job.id}`, {
+      statusRes = await axios.get(`https://api.cloudconvert.com/v2/jobs/${job.id}`, {
         headers: { Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}` }
       });
       const tasks = statusRes.data.data.tasks;
       exportTask = tasks.find(t => t.name === 'export-file');
+      const convertTask = tasks.find(t => t.name === 'convert-file');
+
+      console.log(`[CloudConvert] Poll ${i + 1}: export=${exportTask?.status} convert=${convertTask?.status} msg=${convertTask?.message || ''}`);
+
       if (exportTask?.status === 'finished') break;
-      if (exportTask?.status === 'error') throw new Error('Conversion failed on CloudConvert');
+      if (exportTask?.status === 'error' || convertTask?.status === 'error') {
+        throw new Error(`CloudConvert error: ${convertTask?.message || exportTask?.message || 'unknown'}`);
+      }
     }
 
     if (!exportTask?.result?.files?.length) {
@@ -423,6 +430,7 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     // Step 5: Send to user
     await sendDocument(phone, outputPath, fileName, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${targetFormat.toUpperCase()}_\n\nHere is your converted file.`);
     return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+
   } catch (err) {
     console.error('File convert error:', err.message);
     return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* to go back.');
