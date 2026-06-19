@@ -330,6 +330,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
             reject(err);
           });
 
+        // Dynamic timeout: 90s base + 15s per minute of video duration
+        const dynamicTimeoutMs = 90000 + Math.ceil((durationSeconds / 60) * 15000);
+
         const timeoutHandle = setTimeout(() => {
           if (!finished) {
             try {
@@ -339,7 +342,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
             }
             reject(new Error('COMPRESSION_TIMEOUT'));
           }
-        }, 90000); // 90 seconds
+        }, dynamicTimeoutMs);
 
         ffmpegCommand.on('end', () => clearTimeout(timeoutHandle));
         ffmpegCommand.on('error', () => clearTimeout(timeoutHandle));
