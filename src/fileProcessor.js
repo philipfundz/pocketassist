@@ -284,6 +284,12 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     const videoTitle = (videoInfo?.title || '').trim();
     const videoDescription = (videoInfo?.description || '').trim();
 
+    // TEMP DEBUG — remove after diagnosing caption truncation (item #5)
+    console.log('[SocialDL] Raw description length:', videoDescription.length);
+    console.log('[SocialDL] Raw description:', videoDescription);
+    console.log('[SocialDL] Raw title:', videoTitle);
+    console.log('[SocialDL] Full videoInfo keys:', Object.keys(videoInfo || {}));
+
     // Clean up description: remove t.co links and trim
     const cleanDescription = videoDescription
       .replace(/https:\/\/t\.co\/\S+/g, '')
@@ -295,6 +301,10 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     } else if (videoTitle) {
       captionText = videoTitle.substring(0, 100);
     }
+
+    // TEMP DEBUG — confirm what survives the cleanup step
+    console.log('[SocialDL] Final captionText length:', captionText.length);
+    console.log('[SocialDL] Final captionText:', captionText);
 
     if (durationSeconds > 300) { // 5 minutes
       const mins = Math.floor(durationSeconds / 60);
