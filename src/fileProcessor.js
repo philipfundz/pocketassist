@@ -444,6 +444,7 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     else inputExt = 'jpg';
 
     const target = targetFormat.toLowerCase();
+    console.log('[FILECONVERT DEBUG]', { mediaType, inputExt, target });
 
     // Document conversions temporarily disabled
     if (DOCUMENT_FORMATS.includes(inputExt) || DOCUMENT_FORMATS.includes(target)) {
