@@ -182,7 +182,7 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
         >PA⚡</text>
       </svg>
     `);
-    
+
     finalQrPath = path.join(TEMP_DIR, `${uuidv4()}_qr_final.png`);
 
     await sharp(qrPath)
@@ -420,31 +420,17 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   }
 };
 
-// ─── FILE CONVERTER (CloudConvert API) ───────────────────────────────────────
-// Supported conversions map
-const CONVERSION_MAP = {
-  // To PDF
-  'docx-pdf': { inputFormat: 'docx', outputFormat: 'pdf' },
-  'doc-pdf':  { inputFormat: 'doc',  outputFormat: 'pdf' },
-  'pptx-pdf': { inputFormat: 'pptx', outputFormat: 'pdf' },
-  'xlsx-pdf': { inputFormat: 'xlsx', outputFormat: 'pdf' },
-  'jpg-pdf':  { inputFormat: 'jpg',  outputFormat: 'pdf' },
-  'jpeg-pdf': { inputFormat: 'jpeg', outputFormat: 'pdf' },
-  'png-pdf':  { inputFormat: 'png',  outputFormat: 'pdf' },
-  // From PDF
-  'pdf-docx': { inputFormat: 'pdf', outputFormat: 'docx' },
-  'pdf-jpg':  { inputFormat: 'pdf', outputFormat: 'jpg'  },
-  'pdf-png':  { inputFormat: 'pdf', outputFormat: 'png'  },
-  // Image conversions
-  'png-jpg':  { inputFormat: 'png', outputFormat: 'jpg'  },
-  'jpg-png':  { inputFormat: 'jpg', outputFormat: 'png'  },
-  'webp-jpg': { inputFormat: 'webp', outputFormat: 'jpg' },
-  'jpg-webp': { inputFormat: 'jpg', outputFormat: 'webp' },
-};
+// ─── FILE CONVERTER (Local: sharp + pdf-lib + poppler-utils — no API key) ───
+// CloudConvert removed. Image<->image and image->PDF run fully local via sharp/pdf-lib.
+// PDF->image runs via poppler-utils (pdftoppm) — UNTESTED on Render host, may not be
+// installed; will throw a clear error if missing rather than failing silently.
+// Document conversions (docx/pptx/xlsx<->pdf) are temporarily disabled pending the
+// LibreOffice/Docker setup on the separate pocketassist-converter service.
+const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
+const DOCUMENT_FORMATS = ['docx', 'doc', 'pptx', 'xlsx'];
 
-const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendMessage, sendDocument) => {
-  await sendMessage(phone, '⚙️ Converting your file...\n\n_This may take a moment ⏳_');
-  let inputPath, outputPath;
+const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendMessage, sendDocument, sendImage) => {
+  let inputPath, outputPath, normalizedPath;
   try {
     // Detect input format from mediaType
     let inputExt = '';
@@ -457,92 +443,93 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     else if (mediaType.includes('webp')) inputExt = 'webp';
     else inputExt = 'jpg';
 
-    const convKey = `${inputExt}-${targetFormat.toLowerCase()}`;
-    if (!CONVERSION_MAP[convKey]) {
-      return sendMessage(phone, `❌ Conversion from *${inputExt.toUpperCase()}* to *${targetFormat.toUpperCase()}* is not supported.\n\nType *0* to go back.`);
+    const target = targetFormat.toLowerCase();
+
+    // Document conversions temporarily disabled
+    if (DOCUMENT_FORMATS.includes(inputExt) || DOCUMENT_FORMATS.includes(target)) {
+      return sendMessage(phone, `⚙️ *${inputExt.toUpperCase()} ↔ ${target.toUpperCase()}* conversion is upgrading right now.\n\nIt'll be back soon on our new conversion engine.\n\nType *0* to go back.`);
     }
 
-    // Download the file
-    inputPath = await downloadFile(mediaUrl, inputExt);
+    await sendMessage(phone, '⚙️ Converting your file...\n\n_This may take a moment ⏳_');
 
-    // Step 1: Create CloudConvert job
-    const jobRes = await axios.post('https://api.cloudconvert.com/v2/jobs', {
-      tasks: {
-        'import-file': {
-          operation: 'import/upload'
-        },
-        'convert-file': {
-          operation: 'convert',
-          input: 'import-file',
-          input_format: inputExt,
-          output_format: targetFormat.toLowerCase(),
-        },
-        'export-file': {
-          operation: 'export/url',
-          input: 'convert-file'
-        }
-      }
-    }, {
-      headers: {
-        Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // ── Image → Image (jpg/jpeg/png/webp) ──
+    if (IMAGE_FORMATS.includes(inputExt) && IMAGE_FORMATS.includes(target)) {
+      inputPath = await downloadFile(mediaUrl, inputExt);
+      outputPath = path.join(TEMP_DIR, `${uuidv4()}.${target}`);
 
-    const job = jobRes.data.data;
-    const importTask = job.tasks.find(t => t.name === 'import-file');
+      let pipeline = sharp(inputPath);
+      if (target === 'jpg' || target === 'jpeg') pipeline = pipeline.jpeg({ quality: 90 });
+      else if (target === 'png') pipeline = pipeline.png();
+      else if (target === 'webp') pipeline = pipeline.webp({ quality: 90 });
 
-    // Step 2: Upload the file
-    const uploadForm = new FormData();
-    Object.entries(importTask.result.form.parameters).forEach(([k, v]) => uploadForm.append(k, v));
-    uploadForm.append('file', fs.createReadStream(inputPath));
+      await pipeline.toFile(outputPath);
 
-    await axios.post(importTask.result.form.url, uploadForm, {
-      headers: uploadForm.getHeaders()
-    });
+      await sendDocument(phone, outputPath, `converted.${target}`, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${target.toUpperCase()}_`);
+      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+    }
 
-    // Step 3: Wait for job to finish (poll)
-    let exportTask = null;
-    let statusRes;
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 5000));
-      statusRes = await axios.get(`https://api.cloudconvert.com/v2/jobs/${job.id}`, {
-        headers: { Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}` }
+    // ── Image → PDF ──
+    if (IMAGE_FORMATS.includes(inputExt) && target === 'pdf') {
+      const { PDFDocument } = require('pdf-lib');
+
+      inputPath = await downloadFile(mediaUrl, inputExt);
+      outputPath = path.join(TEMP_DIR, `${uuidv4()}.pdf`);
+
+      // Normalize to PNG first so pdf-lib can embed it regardless of source format
+      normalizedPath = path.join(TEMP_DIR, `${uuidv4()}_norm.png`);
+      await sharp(inputPath).png().toFile(normalizedPath);
+
+      const imageBytes = fs.readFileSync(normalizedPath);
+      const pdfDoc = await PDFDocument.create();
+      const image = await pdfDoc.embedPng(imageBytes);
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+
+      const pdfBytes = await pdfDoc.save();
+      fs.writeFileSync(outputPath, pdfBytes);
+
+      await sendDocument(phone, outputPath, 'converted.pdf', `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → PDF_`);
+      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+    }
+
+    // ── PDF → Image (poppler-utils / pdftoppm — UNTESTED on Render host) ──
+    if (inputExt === 'pdf' && IMAGE_FORMATS.includes(target)) {
+      const { execFile } = require('child_process');
+      inputPath = await downloadFile(mediaUrl, 'pdf');
+      const outputBase = path.join(TEMP_DIR, uuidv4());
+      const popplerFormat = (target === 'jpg' || target === 'jpeg') ? 'jpeg' : 'png';
+
+      await new Promise((resolve, reject) => {
+        execFile('pdftoppm', [`-${popplerFormat}`, '-r', '150', '-singlefile', inputPath, outputBase], (err) => {
+          if (err) return reject(new Error('PDFTOPPM_MISSING_OR_FAILED'));
+          resolve();
+        });
       });
-      const tasks = statusRes.data.data.tasks;
-      exportTask = tasks.find(t => t.name === 'export-file');
-      const convertTask = tasks.find(t => t.name === 'convert-file');
 
-      console.log(`[CloudConvert] Poll ${i + 1}: export=${exportTask?.status} convert=${convertTask?.status} msg=${convertTask?.message || ''}`);
+      const producedExt = popplerFormat === 'jpeg' ? 'jpg' : 'png';
+      const producedPath = `${outputBase}.${producedExt}`;
 
-      if (exportTask?.status === 'finished') break;
-      if (exportTask?.status === 'error' || convertTask?.status === 'error') {
-        throw new Error(`CloudConvert error: ${convertTask?.message || exportTask?.message || 'unknown'}`);
+      if (!fs.existsSync(producedPath)) {
+        throw new Error('PDFTOPPM_OUTPUT_MISSING');
       }
+
+      outputPath = producedPath;
+      await sendImage(phone, outputPath, `✅ *File Converted!*\n\n_PDF → ${target.toUpperCase()}_ (page 1)`);
+      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
     }
 
-    if (!exportTask?.result?.files?.length) {
-      throw new Error('No output file from CloudConvert');
-    }
-
-    // Step 4: Download converted file
-    const fileUrl = exportTask.result.files[0].url;
-    const fileName = exportTask.result.files[0].filename;
-    outputPath = path.join(TEMP_DIR, fileName);
-
-    const fileRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-    fs.writeFileSync(outputPath, fileRes.data);
-
-    // Step 5: Send to user
-    await sendDocument(phone, outputPath, fileName, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${targetFormat.toUpperCase()}_\n\nHere is your converted file.`);
-    return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+    return sendMessage(phone, `❌ Conversion from *${inputExt.toUpperCase()}* to *${target.toUpperCase()}* is not supported.\n\nType *0* to go back.`);
 
   } catch (err) {
     console.error('File convert error:', err.message);
+    if (err.message === 'PDFTOPPM_MISSING_OR_FAILED' || err.message === 'PDFTOPPM_OUTPUT_MISSING') {
+      return sendMessage(phone, '❌ PDF → Image conversion is unavailable on this server right now (poppler-utils missing or failed).\n\nType *0* to go back.');
+    }
     return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* to go back.');
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
+    cleanup(normalizedPath);
   }
 };
 
@@ -608,59 +595,45 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
       return sendMessage(phone, 'Type *0* to go back or send another file.');
 
     } else {
-      // PDF watermark via CloudConvert
+      // PDF watermark — local via pdf-lib, no API key, no limits, runs on every page
+      const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
+
       inputPath = await downloadFile(mediaUrl, 'pdf');
+      outputPath = path.join(TEMP_DIR, `${uuidv4()}_watermarked.pdf`);
 
-      const jobRes = await axios.post('https://api.cloudconvert.com/v2/jobs', {
-        tasks: {
-          'import-file': { operation: 'import/upload' },
-          'watermark-file': {
-            operation: 'convert',
-            input: 'import-file',
-            input_format: 'pdf',
-            output_format: 'pdf',
-            options: {
-              watermark: {
-                text: 'PocketAssist_Bot',
-                font_size: 40,
-                font_color: '#cccccc',
-                opacity: 35,
-                rotation: -30,
-              }
-            }
-          },
-          'export-file': { operation: 'export/url', input: 'watermark-file' }
-        }
-      }, {
-        headers: {
-          Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const pdfBytes = fs.readFileSync(inputPath);
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const watermarkText = 'PocketAssist_Bot';
 
-      const job = jobRes.data.data;
-      const importTask = job.tasks.find(t => t.name === 'import-file');
+      for (const page of pdfDoc.getPages()) {
+        const { width, height } = page.getSize();
+        const fontSize = Math.max(24, Math.floor(width / 14));
+        const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
 
-      const uploadForm = new FormData();
-      Object.entries(importTask.result.form.parameters).forEach(([k, v]) => uploadForm.append(k, v));
-      uploadForm.append('file', fs.createReadStream(inputPath));
-      await axios.post(importTask.result.form.url, uploadForm, { headers: uploadForm.getHeaders() });
-
-      let exportTask = null;
-      for (let i = 0; i < 20; i++) {
-        await new Promise(r => setTimeout(r, 3000));
-        const statusRes = await axios.get(`https://api.cloudconvert.com/v2/jobs/${job.id}`, {
-          headers: { Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}` }
+        // Two diagonal passes per page, same look as the image watermark
+        page.drawText(watermarkText, {
+          x: width / 2 - textWidth / 2,
+          y: height / 2,
+          size: fontSize,
+          font,
+          color: rgb(0.7, 0.7, 0.7),
+          opacity: 0.35,
+          rotate: degrees(-30),
         });
-        exportTask = statusRes.data.data.tasks.find(t => t.name === 'export-file');
-        if (exportTask?.status === 'finished') break;
-        if (exportTask?.status === 'error') throw new Error('Watermark failed');
+        page.drawText(watermarkText, {
+          x: width / 2 - textWidth / 2,
+          y: height * 0.2,
+          size: fontSize,
+          font,
+          color: rgb(0.7, 0.7, 0.7),
+          opacity: 0.35,
+          rotate: degrees(-30),
+        });
       }
 
-      const fileUrl = exportTask.result.files[0].url;
-      outputPath = path.join(TEMP_DIR, `${uuidv4()}_watermarked.pdf`);
-      const fileRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-      fs.writeFileSync(outputPath, fileRes.data);
+      const watermarkedBytes = await pdfDoc.save();
+      fs.writeFileSync(outputPath, watermarkedBytes);
 
       await sendDocument(phone, outputPath, 'watermarked.pdf', '🖼️ *Watermarked PDF*\n\n_Watermark: PocketAssist_Bot_');
       return sendMessage(phone, 'Type *0* to go back or send another file.');
