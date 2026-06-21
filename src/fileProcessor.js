@@ -285,9 +285,10 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     const videoDescription = (videoInfo?.description || '').trim();
 
     let captionText = '';
-    if (videoTitle) captionText += `📝 ${videoTitle.substring(0, 100)}\n`;
-    if (videoDescription && videoDescription !== videoTitle) {
-      captionText += `\n${videoDescription.substring(0, 300)}${videoDescription.length > 300 ? '...' : ''}`;
+    if (cleanDescription) {
+      captionText += `📝 ${cleanDescription.substring(0, 800)}${cleanDescription.length > 800 ? '...' : ''}`;
+    } else if (videoTitle) {
+      captionText += `📝 ${videoTitle.substring(0, 100)}`;
     }
 
     if (durationSeconds > 300) { // 5 minutes
