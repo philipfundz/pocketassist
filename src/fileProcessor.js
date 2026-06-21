@@ -279,7 +279,8 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     }
 
     const durationSeconds = videoInfo?.duration || 0;
-// Extract caption/description for sending alongside video
+
+    // Extract caption/description — clean, forward-ready, no labels or branding
     const videoTitle = (videoInfo?.title || '').trim();
     const videoDescription = (videoInfo?.description || '').trim();
 
@@ -290,9 +291,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
     let captionText = '';
     if (cleanDescription) {
-      captionText += `📝 ${cleanDescription.substring(0, 800)}${cleanDescription.length > 800 ? '...' : ''}`;
+      captionText = cleanDescription.substring(0, 800) + (cleanDescription.length > 800 ? '...' : '');
     } else if (videoTitle) {
-      captionText += `📝 ${videoTitle.substring(0, 100)}`;
+      captionText = videoTitle.substring(0, 100);
     }
 
     if (durationSeconds > 300) { // 5 minutes
@@ -379,9 +380,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       finalPath = compressedPath;
     }
 
-    const finalCaption = captionText.trim()
-      ? `🎬 Here is your downloaded video!\n\n${captionText.trim()}`
-      : '🎬 Here is your downloaded video!';
+    // Clean caption — just the description, forward-ready for WhatsApp Status
+    // Falls back to a simple message if no caption was found
+    const finalCaption = captionText.trim() || '🎬 Video downloaded via PocketAssist';
     await sendVideo(phone, finalPath, finalCaption);
     return sendMessage(phone, 'Type *0* to go back or paste another link.');
 
