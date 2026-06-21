@@ -289,7 +289,23 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     if (videoDescription && videoDescription !== videoTitle) {
       captionText += `\n${videoDescription.substring(0, 300)}${videoDescription.length > 300 ? '...' : ''}`;
     }
-    
+
+    if (durationSeconds > 300) { // 5 minutes
+      const mins = Math.floor(durationSeconds / 60);
+      return sendMessage(phone, `❌ Video is too long (${mins} min).\n\nMax allowed: *5 minutes*\n\nTry a shorter clip.\n\nType *0* to go back.`);
+    }
+
+    await sendMessage(phone, '⬇️ Downloading... please wait');
+    outputPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}.mp4`);
+
+    await ytDlp(url.trim(), {
+      output: outputPath,
+      format: 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=360]/worst',
+      mergeOutputFormat: 'mp4',
+      noPlaylist: true,
+      noCheckCertificates: true,
+    });
+
     if (!fs.existsSync(outputPath)) {
       throw new Error('Download failed — file not created');
     }
@@ -302,7 +318,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       await sendMessage(phone, '⚙️ Compressing video...\n\n_This may take up to 90 seconds ⏳_');
       compressedPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}_compressed.mp4`);
 
-      // Fix 3: ffmpeg 90s timeout — kill process and send error
+      // Fix 3: ffmpeg dynamic timeout — kill process and send error
       await new Promise((resolve, reject) => {
         let finished = false;
 
