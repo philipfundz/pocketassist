@@ -279,10 +279,14 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     }
 
     const durationSeconds = videoInfo?.duration || 0;
-
-    // Extract caption/description for sending alongside video
+// Extract caption/description for sending alongside video
     const videoTitle = (videoInfo?.title || '').trim();
     const videoDescription = (videoInfo?.description || '').trim();
+
+    // Clean up description: remove t.co links and trim
+    const cleanDescription = videoDescription
+      .replace(/https:\/\/t\.co\/\S+/g, '')
+      .trim();
 
     let captionText = '';
     if (cleanDescription) {
