@@ -619,7 +619,6 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
           size: fontSize,
           font,
           color: rgb(0.7, 0.7, 0.7),
-          opacity: 0.35,
           rotate: degrees(-30),
         });
         page.drawText(watermarkText, {
@@ -628,7 +627,6 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
           size: fontSize,
           font,
           color: rgb(0.7, 0.7, 0.7),
-          opacity: 0.35,
           rotate: degrees(-30),
         });
       }
@@ -754,3 +752,6 @@ module.exports = {
   handleESign,
   handleStickerCreator,
 };
+
+
+
