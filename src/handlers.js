@@ -221,7 +221,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
       try {
-        await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument);
+        await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
       } finally {
         resetToSubmenu(phone, 'file');
       }
