@@ -251,171 +251,68 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 const activeDownloads = new Set(); // tracks users currently downloading
 
 const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
-  // Fix 1: Per-user limit — reject if already downloading
   if (activeDownloads.has(phone)) {
     return sendMessage(phone, '⏳ You already have a download in progress.\n\nPlease wait for it to finish before starting another.');
   }
 
   activeDownloads.add(phone);
-  await sendMessage(phone, '⬇️ Checking video... please wait');
+  await sendMessage(phone, '⬇️ Downloading... please wait');
 
-  let outputPath, compressedPath;
-  let ffmpegCommand = null;
-
+  let tempPath;
   try {
-    const ytDlp = require('yt-dlp-exec');
+    const DOWNLOADER_URL = process.env.DOWNLOADER_URL;
+    const DOWNLOADER_TOKEN = process.env.DOWNLOADER_TOKEN;
 
-    // Fix 2: Pre-download duration check — reject over 5 min instantly
-    let videoInfo;
-    try {
-      videoInfo = await ytDlp(url.trim(), {
-        dumpSingleJson: true,
-        noPlaylist: true,
-        noCheckCertificates: true,
-        skipDownload: true,
-      });
-    } catch (infoErr) {
-      throw new Error('Could not fetch video info — link may be invalid or unsupported');
-    }
-
-    const durationSeconds = videoInfo?.duration || 0;
-
-    // Extract caption/description — clean, forward-ready, no labels or branding
-    const videoTitle = (videoInfo?.title || '').trim();
-    const videoDescription = (videoInfo?.description || '').trim();
-
-    // TEMP DEBUG — remove after diagnosing caption truncation (item #5)
-    console.log('[SocialDL] Raw description length:', videoDescription.length);
-    console.log('[SocialDL] Raw description:', videoDescription);
-    console.log('[SocialDL] Raw title:', videoTitle);
-    console.log('[SocialDL] Full videoInfo keys:', Object.keys(videoInfo || {}));
-
-    // Clean up description: remove t.co links and trim
-    const cleanDescription = videoDescription
-      .replace(/https:\/\/t\.co\/\S+/g, '')
-      .trim();
-
-    let captionText = '';
-    if (cleanDescription) {
-      captionText = cleanDescription.substring(0, 800) + (cleanDescription.length > 800 ? '...' : '');
-    } else if (videoTitle) {
-      captionText = videoTitle.substring(0, 100);
-    }
-
-    // TEMP DEBUG — confirm what survives the cleanup step
-    console.log('[SocialDL] Final captionText length:', captionText.length);
-    console.log('[SocialDL] Final captionText:', captionText);
-
-    if (durationSeconds > 300) { // 5 minutes
-      const mins = Math.floor(durationSeconds / 60);
-      return sendMessage(phone, `❌ Video is too long (${mins} min).\n\nMax allowed: *5 minutes*\n\nTry a shorter clip.\n\nType *0* to go back.`);
-    }
-
-    await sendMessage(phone, '⬇️ Downloading... please wait');
-    outputPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}.mp4`);
-
-    await ytDlp(url.trim(), {
-      output: outputPath,
-      format: 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=360]/worst',
-      mergeOutputFormat: 'mp4',
-      noPlaylist: true,
-      noCheckCertificates: true,
+    const response = await axios.post(`${DOWNLOADER_URL}/download`, { url: url.trim() }, {
+      headers: { 'x-auth-token': DOWNLOADER_TOKEN },
+      responseType: 'stream',
+      timeout: 180000, // 3 min — covers remote download + compression
+      validateStatus: () => true, // handle non-200 manually since body is a stream
     });
 
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('Download failed — file not created');
+    if (response.status !== 200) {
+      const chunks = [];
+      for await (const chunk of response.data) chunks.push(chunk);
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let errMsg = 'Download failed';
+      try { errMsg = JSON.parse(bodyText).error || errMsg; } catch (e) {}
+      throw new Error(errMsg);
     }
 
-    let finalPath = outputPath;
-    const stats = fs.statSync(outputPath);
-    const fileSizeMB = stats.size / (1024 * 1024);
+    tempPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}.mp4`);
+    const writer = fs.createWriteStream(tempPath);
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
 
-    if (fileSizeMB > 10) {
-      await sendMessage(phone, '⚙️ Compressing video...\n\n_This may take up to 90 seconds ⏳_');
-      compressedPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}_compressed.mp4`);
+    const captionHeader = response.headers['x-caption'];
+    const caption = captionHeader ? decodeURIComponent(captionHeader) : '🎬 Video downloaded via PocketAssist';
 
-      // Fix 3: ffmpeg dynamic timeout — kill process and send error
-      await new Promise((resolve, reject) => {
-        let finished = false;
-
-        ffmpegCommand = ffmpeg(outputPath)
-          .outputOptions([
-            '-vcodec libx264',
-            '-crf 28',
-            '-preset fast',
-            '-vf scale=480:-2',
-            '-acodec aac',
-            '-b:a 96k',
-          ])
-          .output(compressedPath)
-          .on('end', () => {
-            finished = true;
-            resolve();
-          })
-          .on('error', (err) => {
-            finished = true;
-            reject(err);
-          });
-
-        // Dynamic timeout: 90s base + 15s per minute of video duration
-        const dynamicTimeoutMs = 90000 + Math.ceil((durationSeconds / 60) * 15000);
-
-        const timeoutHandle = setTimeout(() => {
-          if (!finished) {
-            try {
-              ffmpegCommand.kill('SIGKILL');
-            } catch (e) {
-              console.error('ffmpeg kill error:', e.message);
-            }
-            reject(new Error('COMPRESSION_TIMEOUT'));
-          }
-        }, dynamicTimeoutMs);
-
-        ffmpegCommand.on('end', () => clearTimeout(timeoutHandle));
-        ffmpegCommand.on('error', () => clearTimeout(timeoutHandle));
-
-        ffmpegCommand.run();
-      });
-
-      if (!fs.existsSync(compressedPath)) {
-        throw new Error('Compression failed — output not created');
-      }
-
-      const compressedStats = fs.statSync(compressedPath);
-      if (compressedStats.size > 15 * 1024 * 1024) {
-        cleanup(compressedPath);
-        return sendMessage(phone, '❌ Video is too large even after compression.\n\nTry a shorter clip (max ~3 min).\n\nType *0* to go back.');
-      }
-
-      finalPath = compressedPath;
-    }
-
-    // Clean caption — just the description, forward-ready for WhatsApp Status
-    // Falls back to a simple message if no caption was found
-    const finalCaption = captionText.trim() || '🎬 Video downloaded via PocketAssist';
-    await sendVideo(phone, finalPath, finalCaption);
+    await sendVideo(phone, tempPath, caption);
     return sendMessage(phone, 'Type *0* to go back or paste another link.');
 
   } catch (err) {
     console.error('Social DL error:', err.message);
 
     let msg;
-    if (err.message === 'COMPRESSION_TIMEOUT') {
-      msg = '⏱️ Compression took too long and was stopped.\n\nTry a shorter or lower quality clip.\n\nType *0* to go back.';
-    } else if (err.message.includes('not supported') || err.message.includes('Unsupported')) {
-      msg = '❌ This link is not supported.\n\nSupported: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook';
+    if (err.message.includes('5 minutes') || err.message.includes('too long')) {
+      msg = `❌ ${err.message}\n\nType *0* to go back.`;
+    } else if (err.message.includes('too large')) {
+      msg = `❌ ${err.message}\n\nType *0* to go back.`;
     } else if (err.message.includes('Could not fetch video info')) {
       msg = '❌ Could not read this link. Check the URL and try again.\n\nType *0* to go back.';
+    } else if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
+      msg = '⏱️ Download took too long and timed out.\n\nTry a shorter clip.\n\nType *0* to go back.';
     } else {
       msg = '❌ Download failed. Check the link and try again.\n\nType *0* to go back.';
     }
     return sendMessage(phone, msg);
 
   } finally {
-    // Fix 4: Force cleanup — only this user's files
-    cleanup(outputPath);
-    cleanup(compressedPath);
-    // Fix 5: Force release — always remove from active downloads
+    cleanup(tempPath);
     activeDownloads.delete(phone);
   }
 };
