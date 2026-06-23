@@ -5,7 +5,7 @@ const fs = require('fs');
 const FormData = require('form-data');
 const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
-const { onboardingFlow } = require('./src/onboarding');
+const { onboardingFlow, handleLinkCommand } = require('./src/onboarding');
 const { handleMessage } = require('./src/handlers');
 
 const app = express();
@@ -235,11 +235,17 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Check for LINK command BEFORE touching/creating any account for this phone
+    if (msgType === 'text') {
+      const handled = await handleLinkCommand(phone, text, sendMessage);
+      if (handled) return;
+    }
+
     // Get or create user
     let user = await getOrCreateUser(phone);
     user = await checkAndResetDaily(user);
     const access = await checkAccess(phone);
-
+    
     // Run onboarding for new users
     const isNewUser = await onboardingFlow(user, text, sendMessage);
     if (isNewUser) return;
