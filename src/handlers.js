@@ -18,7 +18,7 @@ const {
   handleVoiceTranscriber,
   handleWebpageReader,
   handleSocialDL,
-  handleFileConvert,
+  handleMultiImageToPDF,
   handleWatermark,
   handleESign,
   handleStickerCreator,
@@ -204,27 +204,63 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return;
     }
 
-    // 2 ── File Convert (Free)
+    // 2 ── File Convert (Free) — supports multi-image → single PDF
     if (text === '2' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'convert_file', data: {} });
-      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported formats:*\nPDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), JPG, PNG, WEBP\n\n_Send your file now:_`);
+      setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
+      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported formats:*\nPDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), JPG, PNG, WEBP\n\n_Tip: send multiple images one after another to combine them into a single PDF._\n\n_Send your file now:_`);
     }
     if (session.step === 'convert_file') {
-      if (!mediaUrl) {
-        return sendMessage(phone, '📎 Please send a *file* to convert.');
+      const images = session.data.images || [];
+
+      if (mediaUrl) {
+        const isImage = mediaType?.includes('image');
+
+        if (isImage) {
+          if (images.length >= 15) {
+            return sendMessage(phone, `⚠️ Batch limit reached (15 images max).\n\nType *PDF* now to combine what you've sent, or *0* to start over.`);
+          }
+
+          images.push({ mediaUrl, mediaType });
+          setSession(phone, { menu: 'file', step: 'convert_file', data: { images } });
+
+          const remaining = 15 - images.length;
+          return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
+        }
+
+        setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
+        return sendMessage(phone, `✅ File received!\n\nWhat format do you want to convert it to?\n\nExamples: *PDF, DOCX, JPG, PNG, XLSX*\n\nType the format name:`);
       }
-      setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
-      return sendMessage(phone, `✅ File received!\n\nWhat format do you want to convert it to?\n\nExamples: *PDF, DOCX, JPG, PNG, XLSX*\n\nType the format name:`);
+
+      if (images.length === 0) {
+        return sendMessage(phone, '📎 Please send a *file* (or image) to convert.');
+      }
+
+      const target = text.toLowerCase().trim();
+      const { allowed, access: acc } = await canUseTools(phone, false);
+      if (!allowed) return sendMessage(phone, guardMessage(acc, false));
+
+      if (images.length === 1) {
+        await incrementDailyCount(phone);
+        await handleFileConvert(phone, images[0].mediaUrl, images[0].mediaType, target, sendMessage, sendDocument, sendImage);
+        resetToSubmenu(phone, 'file');
+        return;
+      }
+
+      if (target !== 'pdf') {
+        return sendMessage(phone, `❌ ${images.length} images can only be combined into one *PDF*.\n\nType *PDF* to continue, or *0* to go back and convert a single image to another format instead.`);
+      }
+
+      await incrementDailyCount(phone);
+      await handleMultiImageToPDF(phone, images.map(i => i.mediaUrl), sendMessage, sendDocument);
+      resetToSubmenu(phone, 'file');
+      return;
     }
     if (session.step === 'convert_format') {
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      try {
-        await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
-      } finally {
-        resetToSubmenu(phone, 'file');
-      }
+      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
+      resetToSubmenu(phone, 'file');
       return;
     }
 
@@ -509,5 +545,3 @@ const getSessionStep = (phone) => {
   const session = getSession(phone);
   return session.step || null;
 };
-
-module.exports = { handleMessage, getSessionStep };

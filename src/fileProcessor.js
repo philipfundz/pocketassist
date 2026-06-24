@@ -431,6 +431,54 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
   }
 };
 
+//
+const MAX_IMAGES_PER_BATCH = 15;
+const MAX_IMAGE_DIMENSION = 1600; // px, longest side
+const JPEG_QUALITY = 75;
+
+const handleMultiImageToPDF = async (phone, mediaUrls, sendMessage, sendDocument) => {
+  await sendMessage(phone, `⚙️ Combining ${mediaUrls.length} images into one PDF...\n\n_This may take a moment ⏳_`);
+  const { PDFDocument } = require('pdf-lib');
+  const downloadedPaths = [];
+  const compressedPaths = [];
+  let outputPath;
+  try {
+    const pdfDoc = await PDFDocument.create();
+
+    for (const mediaUrl of mediaUrls) {
+      const inputPath = await downloadFile(mediaUrl, 'jpg');
+      downloadedPaths.push(inputPath);
+
+      const compressedPath = path.join(TEMP_DIR, `${uuidv4()}_compressed.jpg`);
+      await sharp(inputPath)
+        .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: JPEG_QUALITY })
+        .toFile(compressedPath);
+      compressedPaths.push(compressedPath);
+
+      const imageBytes = fs.readFileSync(compressedPath);
+      const image = await pdfDoc.embedJpg(imageBytes);
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+    }
+
+    outputPath = path.join(TEMP_DIR, `${uuidv4()}_combined.pdf`);
+    const pdfBytes = await pdfDoc.save();
+    fs.writeFileSync(outputPath, pdfBytes);
+
+    const finalSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(1);
+    await sendDocument(phone, outputPath, 'combined.pdf', `✅ *${mediaUrls.length} images combined into one PDF!*\n\n_File size: ${finalSizeMB}MB_`);
+    return sendMessage(phone, 'Type *0* to go back or send more images to convert.');
+  } catch (err) {
+    console.error('Multi-image to PDF error:', err.message);
+    return sendMessage(phone, '❌ Could not combine images into PDF. Please try again.\n\nType *0* to go back.');
+  } finally {
+    downloadedPaths.forEach(cleanup);
+    compressedPaths.forEach(cleanup);
+    cleanup(outputPath);
+  }
+};
+
 // ─── WATERMARK (Premium) ──────────────────────────────────────────────────────
 const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImage, sendDocument) => {
   await sendMessage(phone, '🖼️ Adding watermark...');
@@ -645,10 +693,10 @@ module.exports = {
   handleWebpageReader,
   handleSocialDL,
   handleFileConvert,
+  handleMultiImageToPDF,
   handleWatermark,
   handleESign,
   handleStickerCreator,
 };
-
 
 
