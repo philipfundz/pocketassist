@@ -545,3 +545,5 @@ const getSessionStep = (phone) => {
   const session = getSession(phone);
   return session.step || null;
 };
+
+module.exports = { handleMessage, getSessionStep };
