@@ -457,7 +457,7 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
         'Authorization': `Bearer ${CONVERTER_TOKEN}`,
       },
       responseType: 'stream',
-      timeout: 90000, // 90s — covers Render cold start + LibreOffice/pdf2docx processing
+      timeout: 600000, // 10 min — large multi-page PDFs via pdf2docx can take a while
       validateStatus: () => true,
     });
 

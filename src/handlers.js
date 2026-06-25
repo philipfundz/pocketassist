@@ -208,7 +208,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     // 2 ── File Convert (Free) — supports multi-image → single PDF
     if (text === '2' && !session.step) {
       setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
-      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported formats:*\nPDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), JPG, PNG, WEBP\n\n_Tip: send multiple images one after another to combine them into a single PDF._\n\n_Send your file now:_`);
+      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF._\n\n_Send your file now:_`);
     }
     if (session.step === 'convert_file') {
       const images = session.data.images || [];
