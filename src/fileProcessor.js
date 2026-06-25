@@ -343,9 +343,16 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     const target = targetFormat.toLowerCase();
     console.log('[FILECONVERT DEBUG]', { mediaType, inputExt, target });
 
-    // Document conversions temporarily disabled
-    if (DOCUMENT_FORMATS.includes(inputExt) || DOCUMENT_FORMATS.includes(target)) {
-      return sendMessage(phone, `⚙️ *${inputExt.toUpperCase()} ↔ ${target.toUpperCase()}* conversion is upgrading right now.\n\nIt'll be back soon on our new conversion engine.\n\nType *0* to go back.`);
+   // Document <-> PDF and PDF -> DOCX via pocketassist-converter microservice
+    const isDocumentSource = DOCUMENT_FORMATS.includes(inputExt);
+    const isPdfToDocx = inputExt === 'pdf' && target === 'docx';
+
+    if ((isDocumentSource && target === 'pdf') || isPdfToDocx) {
+      return handleDocumentConvert(phone, mediaUrl, inputExt, target, sendMessage, sendDocument);
+    }
+
+    if (isDocumentSource || DOCUMENT_FORMATS.includes(target)) {
+      return sendMessage(phone, `❌ *${inputExt.toUpperCase()} → ${target.toUpperCase()}* isn't supported yet.\n\nSupported: DOCX/PPTX/XLSX → PDF, and PDF → DOCX.\n\nType *0* to go back.`);
     }
 
     await sendMessage(phone, '⚙️ Converting your file...\n\n_This may take a moment ⏳_');
@@ -431,7 +438,66 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
   }
 };
 
-//
+// ─── DOCUMENT CONVERT (via pocketassist-converter microservice) ────────────
+const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMessage, sendDocument) => {
+  let inputPath, outputPath;
+  try {
+    const CONVERTER_URL = process.env.CONVERTER_URL;
+    const CONVERTER_TOKEN = process.env.CONVERTER_TOKEN;
+
+    inputPath = await downloadFile(mediaUrl, inputExt);
+
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(inputPath), `input.${inputExt}`);
+    formData.append('targetFormat', target);
+
+    const response = await axios.post(`${CONVERTER_URL}/convert`, formData, {
+      headers: {
+        ...formData.getHeaders(),
+        'Authorization': `Bearer ${CONVERTER_TOKEN}`,
+      },
+      responseType: 'stream',
+      timeout: 90000, // 90s — covers Render cold start + LibreOffice/pdf2docx processing
+      validateStatus: () => true,
+    });
+
+    if (response.status !== 200) {
+      const chunks = [];
+      for await (const chunk of response.data) chunks.push(chunk);
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let errMsg = 'Conversion failed';
+      try { errMsg = JSON.parse(bodyText).error || errMsg; } catch (e) {}
+      throw new Error(errMsg);
+    }
+
+    outputPath = path.join(TEMP_DIR, `${uuidv4()}.${target}`);
+    const writer = fs.createWriteStream(outputPath);
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+
+    await sendDocument(phone, outputPath, `converted.${target}`, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${target.toUpperCase()}_`);
+    return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+
+  } catch (err) {
+    console.error('Document convert error:', err.message);
+    let msg = '❌ Conversion failed. Please try again.\n\nType *0* to go back.';
+    if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
+      msg = '⏱️ Conversion took too long and timed out. Try again in a moment.\n\nType *0* to go back.';
+    } else if (err.message.includes('not supported')) {
+      msg = `❌ ${err.message}\n\nType *0* to go back.`;
+    }
+    return sendMessage(phone, msg);
+  } finally {
+    cleanup(inputPath);
+    cleanup(outputPath);
+  }
+};
+
+//andle multiple imae to pdf
 const MAX_IMAGES_PER_BATCH = 15;
 const MAX_IMAGE_DIMENSION = 1600; // px, longest side
 const JPEG_QUALITY = 75;

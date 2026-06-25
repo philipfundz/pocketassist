@@ -1,5 +1,5 @@
 const getMainMenu = () => `🤖 *PocketAssist*
-_Your smart student companion_
+_Your everyday AI assistant_
 ━━━━━━━━━━━━━━
 1️⃣ 🧠 AI Tools
 2️⃣ 📁 File Tools

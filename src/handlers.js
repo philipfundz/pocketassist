@@ -18,6 +18,7 @@ const {
   handleVoiceTranscriber,
   handleWebpageReader,
   handleSocialDL,
+  handleFileConvert,    
   handleMultiImageToPDF,
   handleWatermark,
   handleESign,
@@ -175,7 +176,6 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000))
         ]);
         await incrementDailyCount(phone);
-        setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
         return sendMessage(phone, `✅ *Rewritten:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nPaste another passage or type *0* to go back`);
       } catch (err) {
         if (err.message === 'timeout') {
@@ -260,7 +260,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
+     await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
       setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
       return sendMessage(phone, '─────────────────\nSend another file or type *0* to go back');
     }
@@ -445,8 +445,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         const { allowed, access: acc } = await canUseTools(phone, false);
         if (!allowed) return sendMessage(phone, guardMessage(acc, false));
         await incrementDailyCount(phone);
-        setSession(phone, { menu: 'student', step: 'cgpa', data: { courses: [] } });
-        return sendMessage(phone, `📊 *CGPA Result*\n━━━━━━━━━━━━━━\nCourses: ${courses.length}\nTotal Units: ${totalUnits}\n\n🎓 *CGPA: ${cgpa}*\n🏅 *${classification}*\n\n_${acc.remainingFree - 1} free uses left today_\n\n─────────────────\nEnter another course or type *0* to go back`);
+        resetToSubmenu(phone, 'student');
+        return sendMessage(phone, `📊 *CGPA Result*\n━━━━━━━━━━━━━━\nCourses: ${courses.length}\nTotal Units: ${totalUnits}\n\n🎓 *CGPA: ${cgpa}*\n🏅 *${classification}*\n\n_${acc.remainingFree - 1} free uses left today_\n\n─────────────────\nType *1* to calculate again or *0* to go back`);
       }
       const parts = text.trim().split(/\s+/);
       if (parts.length >= 3) {
@@ -471,8 +471,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📋 Building your CV...\n\n_This may take a moment ⏳_');
       const cv = await askGroq(PROMPTS.cvBuilder(text));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'student', step: 'cv', data: {} });
-      return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nSend another set of details or type *0* to go back`);
+      resetToSubmenu(phone, 'student');
+      return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *2* to build another or *0* to go back`);
     }
 
     // 3 ── Assignment Writer (Premium)
@@ -493,8 +493,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📝 Writing your assignment...\n\n_This may take a moment ⏳_');
       const assignment = await askGroq(PROMPTS.assignmentWriter(session.data.topic, details));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'student', step: 'assign_topic', data: {} });
-      return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nSend another topic or type *0* to go back`);
+      resetToSubmenu(phone, 'student');
+      return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *3* to write another or *0* to go back`);
     }
 
     // 4 ── Past Question Solver (Premium)
@@ -514,8 +514,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📚 Solving your question...\n\n_This may take a moment ⏳_');
       const solution = await askGroq(PROMPTS.pastQSolver(text, session.data.course));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'student', step: 'pastq_course', data: {} });
-      return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nSend another course or type *0* to go back`);
+      resetToSubmenu(phone, 'student');
+      return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *4* to solve another or *0* to go back`);
     }
 
     // 5 ── Cover Letter (Premium)
@@ -533,8 +533,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📨 Writing your cover letter...\n\n_This may take a moment ⏳_');
       const letter = await askGroq(PROMPTS.coverLetter(parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'student', step: 'cover', data: {} });
-      return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nSend another set of details or type *0* to go back`);
+      resetToSubmenu(phone, 'student');
+      return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *5* to write another or *0* to go back`);
     }
   }
 
