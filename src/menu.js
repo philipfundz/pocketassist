@@ -69,8 +69,11 @@ const getHelpMessage = () => `❓ *PocketAssist Help*
 - Send an image → OCR text extraction
 - Send a file → File Converter
 ━━━━━━━━━━━━━━
-*Support:* Contact us on WhatsApp
-*Version:* PocketAssist v1.0 🚀`;
+*Support:*
+📱 WhatsApp: +2349139958775
+📧 Email: pocketassistng@gmail.com
+━━━━━━━━━━━━━━
+_PocketAssist v1.0_ ⚡`;
 
 const getPremiumMessage = () => `⭐ *Upgrade to Premium*
 ━━━━━━━━━━━━━━
