@@ -36,26 +36,24 @@ const onboardingFlow = async (user, message, sendMessage, sendImageUrl) => {
   const phone = user.phone;
   if (user.onboarded) return false;
 
-  await sendImageUrl(phone, 'https://res.cloudinary.com/dmldf1kno/image/upload/f_auto,q_auto/pocketassist_onboarding_card_v2_-_Copy_wwdwyg');
-
-  await sendMessage(phone,
-    `━━━━━━━━━━━━━━━━━━
-👋 *Welcome to PocketAssist!*
-━━━━━━━━━━━━━━━━━━
+  await sendImageUrl(
+    phone,
+    'https://res.cloudinary.com/dmldf1kno/image/upload/f_auto,q_auto/pocketassist_onboarding_card_v2_-_Copy_wwdwyg',
+    `👋 *Welcome to PocketAssist!*
 
 Your AI-powered utility bot — built to save you time.
 
 🆓 *Free plan* (9 uses/day):
-- AI Q&A & Smart Reply
-- OCR (image → text)
-- File Converter
-- Voice Transcriber
-- URL Shortener & QR Code
-- Webpage Reader
+• AI Q&A & Smart Reply
+• OCR (image → text)
+• File Converter
+• Voice Transcriber
+• URL Shortener & QR Code
+• Webpage Reader
 
 ⭐ *Premium* — ₦1,000/month:
-- All 18 tools unlocked
-- CV Builder, Doc Writer, Research Helper & more
+• All 18 tools unlocked
+• CV Builder, Doc Writer, Research Helper & more
 
 Your Pocket ID: *${user.pocket_id}*
 _Use this to link other phones to your account._
