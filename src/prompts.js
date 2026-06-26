@@ -1,39 +1,5 @@
 const PROMPTS = {
   // AI Q&A
-  aiQA: (question) => `You are PocketAssist, a helpful AI assistant for COOU students in Nigeria.
-Answer this question clearly and concisely: ${question}
-Keep response under 300 words. Use simple English.`,
-
-  // AI Smart Reply
-  smartReply: (message) => `You are PocketAssist helping a Nigerian student craft a smart reply.
-Original message: "${message}"
-Generate 3 different reply options:
-1. Formal/Professional
-2. Friendly/Casual
-3. Short/Direct
-Format each clearly numbered.`,
-
-  // Assignment Writer — WhatsApp-friendly formatting
-  assignmentWriter: (topic, details) => `You are an academic assistant helping a Nigerian university student.
-Topic: ${topic}
-Details: ${details}
-
-Write a well-structured academic assignment. Use this exact format for WhatsApp readability:
-
-*INTRODUCTION*
-[Write introduction here]
-
-*MAIN BODY*
-
-*Point 1: [Title]*
-[Explanation]
-
-*Point 2: [Title]*
-[Explanation]
-
-*Point 3: [Title]*
-const PROMPTS = {
-  // AI Q&A
   aiQA: (question) => `You are PocketAssist, a helpful AI assistant.
 Answer this question clearly and concisely: ${question}
 Keep response under 300 words. Use simple English. Use plain numbered lists if needed. Do not use asterisks (*), bold, or any markdown symbols.`,
