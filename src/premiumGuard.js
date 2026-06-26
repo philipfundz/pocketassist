@@ -1,27 +1,30 @@
 const getLimitMessage = (remainingFree, isPremiumTool) => {
   if (isPremiumTool) {
-    return `⭐ *Premium Tool*
+    return `━━━━━━━━━━━━━━━━━━
+⭐ *Premium Feature*
+━━━━━━━━━━━━━━━━━━
 
-This tool is only available to Premium subscribers.
+This tool is available to Premium subscribers only.
 
-💰 *Upgrade for just ₦1,000/month* to unlock:
-- 18 powerful tools
-- Unlimited daily usage
-- Priority support
+*Upgrade to Premium* for ₦1,000/month and get:
+- All 18 tools unlocked
+- Higher daily limits
+- Priority processing
 
-Type *PREMIUM* to subscribe now!`;
+Type *PREMIUM* to subscribe.`;
   }
 
   if (remainingFree === 0) {
-    return `⚠️ *Daily Limit Reached*
+    return `━━━━━━━━━━━━━━━━━━
+⚠️ *Daily Limit Reached*
+━━━━━━━━━━━━━━━━━━
 
-You've used all 9 free tools for today.
+You've used all 9 free actions for today.
 Your limit resets at *midnight* 🕛
 
-💡 *Want unlimited access?*
-Upgrade to Premium for just ₦1,000/month!
+*Want more?* Upgrade to Premium for ₦1,000/month — no daily cap.
 
-Type *PREMIUM* to subscribe or come back tomorrow.`;
+Type *PREMIUM* to upgrade, or check back tomorrow.`;
   }
 
   return null;
