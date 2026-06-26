@@ -65,7 +65,7 @@ const handleOCR = async (phone, mediaUrl, sendMessage) => {
       return sendMessage(phone, '❌ No text found in this image. Try a clearer photo.');
     }
 
-    return sendMessage(phone, `📄 *Extracted Text:*\n\n${text}\n\nType *0* to go back`);
+    return sendMessage(phone, `📄 *Extracted Text:*\n━━━━━━━━━━━━━━\n\n${text}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('OCR error:', err.message);
     return sendMessage(phone, '❌ OCR failed. Please try again with a clearer image.');
@@ -92,7 +92,7 @@ const handleVoiceTranscriber = async (phone, mediaUrl, sendMessage) => {
       return sendMessage(phone, '❌ Could not transcribe. Please send a clearer voice message.');
     }
 
-    return sendMessage(phone, `🎙️ *Transcription:*\n\n${transcription.text}\n\nType *0* to go back`);
+    return sendMessage(phone, `🎙️ *Transcription:*\n━━━━━━━━━━━━━━\n\n${transcription.text}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('Voice transcribe error:', err.message);
     return sendMessage(phone, '❌ Transcription failed. Please try again.');
@@ -113,7 +113,7 @@ const handleURLShortener = async (phone, url, sendMessage) => {
     const response = await axios.get(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url.trim())}`);
     const shortUrl = response.data;
 
-    return sendMessage(phone, `🔗 *Shortened URL:*\n\n${shortUrl}\n\n_Original:_ ${url.trim()}\n\nType *0* to go back`);
+    return sendMessage(phone, `🔗 *Shortened URL:*\n\n${shortUrl}\n\n_Original:_ ${url.trim()}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('URL shortener error:', err.message);
     return sendMessage(phone, '❌ Could not shorten URL. Please try again.');
@@ -141,7 +141,6 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
       },
     });
 
-    // Draw white circle + dark rounded square + PA⚡ text using SVG
     const circleSize = 130;
     const circlePos = Math.floor((qrSize - circleSize) / 2);
 
@@ -152,7 +151,6 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
             <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.25)"/>
           </filter>
         </defs>
-        <!-- White circle background -->
         <circle
           cx="${qrSize / 2}"
           cy="${qrSize / 2}"
@@ -160,7 +158,6 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
           fill="white"
           filter="url(#shadow)"
         />
-        <!-- Dark rounded square -->
         <rect
           x="${qrSize / 2 - 52}"
           y="${qrSize / 2 - 52}"
@@ -170,7 +167,6 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
           ry="22"
           fill="#111111"
         />
-        <!-- PA⚡ text on same line -->
         <text
           x="${qrSize / 2}"
           y="${qrSize / 2 + 12}"
@@ -193,7 +189,7 @@ const handleQRCode = async (phone, text, sendMessage, sendImage) => {
     qrPath = null;
 
     await sendImage(phone, finalQrPath, `📱 *QR Code Generated!*\n\n_Content:_ ${text.trim().substring(0, 50)}${text.length > 50 ? '...' : ''}`);
-    return sendMessage(phone, 'Type *0* to go back or send another text for a new QR code.');
+    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another text for a new QR code.');
   } catch (err) {
     console.error('QR Code error:', err.message);
     return sendMessage(phone, '❌ QR code generation failed. Please try again.');
@@ -240,7 +236,7 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
     });
 
     const result = summary.choices[0].message.content;
-    return sendMessage(phone, `🌐 *Webpage Summary:*\n\n${result}\n\n_Source:_ ${url.trim()}\n\nType *0* to go back`);
+    return sendMessage(phone, `🌐 *Webpage Summary:*\n━━━━━━━━━━━━━━\n\n${result}\n\n_Source:_ ${url.trim()}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('Web reader error:', err.message);
     return sendMessage(phone, '❌ Could not read that webpage. Check the URL and try again.');
@@ -248,7 +244,7 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 };
 
 // ─── SOCIAL DOWNLOADER (yt-dlp + ffmpeg compress, fully optimised) ──────────
-const activeDownloads = new Set(); // tracks users currently downloading
+const activeDownloads = new Set();
 
 const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   if (activeDownloads.has(phone)) {
@@ -266,8 +262,8 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     const response = await axios.post(`${DOWNLOADER_URL}/download`, { url: url.trim() }, {
       headers: { 'x-auth-token': DOWNLOADER_TOKEN },
       responseType: 'stream',
-      timeout: 180000, // 3 min — covers remote download + compression
-      validateStatus: () => true, // handle non-200 manually since body is a stream
+      timeout: 180000,
+      validateStatus: () => true,
     });
 
     if (response.status !== 200) {
@@ -292,22 +288,20 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     const caption = captionHeader ? decodeURIComponent(captionHeader) : '🎬 Video downloaded via PocketAssist';
 
     await sendVideo(phone, tempPath, caption);
-    return sendMessage(phone, 'Type *0* to go back or paste another link.');
+    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
 
   } catch (err) {
     console.error('Social DL error:', err.message);
 
+    // Downloader now returns specific, user-facing error text — pass it through
+    // instead of overriding with a generic message, except for known special cases.
     let msg;
-    if (err.message.includes('5 minutes') || err.message.includes('too long')) {
-      msg = `❌ ${err.message}\n\nType *0* to go back.`;
-    } else if (err.message.includes('too large')) {
-      msg = `❌ ${err.message}\n\nType *0* to go back.`;
-    } else if (err.message.includes('Could not fetch video info')) {
-      msg = '❌ Could not read this link. Check the URL and try again.\n\nType *0* to go back.';
-    } else if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
-      msg = '⏱️ Download took too long and timed out.\n\nTry a shorter clip.\n\nType *0* to go back.';
+    if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
+      msg = '⏱️ Download took too long and timed out.\n\nTry a shorter clip.\n\nType *0* 🔙 to go back.';
+    } else if (err.message && err.message.trim().length > 0) {
+      msg = `❌ ${err.message}\n\nType *0* 🔙 to go back.`;
     } else {
-      msg = '❌ Download failed. Check the link and try again.\n\nType *0* to go back.';
+      msg = '❌ Download failed. Check the link and try again.\n\nType *0* 🔙 to go back.';
     }
     return sendMessage(phone, msg);
 
@@ -318,18 +312,12 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 };
 
 // ─── FILE CONVERTER (Local: sharp + pdf-lib + poppler-utils — no API key) ───
-// CloudConvert removed. Image<->image and image->PDF run fully local via sharp/pdf-lib.
-// PDF->image runs via poppler-utils (pdftoppm) — UNTESTED on Render host, may not be
-// installed; will throw a clear error if missing rather than failing silently.
-// Document conversions (docx/pptx/xlsx<->pdf) are temporarily disabled pending the
-// LibreOffice/Docker setup on the separate pocketassist-converter service.
 const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];
 const DOCUMENT_FORMATS = ['docx', 'doc', 'pptx', 'xlsx'];
 
 const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendMessage, sendDocument, sendImage) => {
   let inputPath, outputPath, normalizedPath;
   try {
-    // Detect input format from mediaType
     let inputExt = '';
     if (mediaType.includes('pdf'))  inputExt = 'pdf';
     else if (mediaType.includes('word') || mediaType.includes('docx')) inputExt = 'docx';
@@ -343,7 +331,6 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     const target = targetFormat.toLowerCase();
     console.log('[FILECONVERT DEBUG]', { mediaType, inputExt, target });
 
-   // Document <-> PDF and PDF -> DOCX via pocketassist-converter microservice
     const isDocumentSource = DOCUMENT_FORMATS.includes(inputExt);
     const isPdfToDocx = inputExt === 'pdf' && target === 'docx';
 
@@ -352,12 +339,11 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
     }
 
     if (isDocumentSource || DOCUMENT_FORMATS.includes(target)) {
-      return sendMessage(phone, `❌ *${inputExt.toUpperCase()} → ${target.toUpperCase()}* isn't supported yet.\n\nSupported: DOCX/PPTX/XLSX → PDF, and PDF → DOCX.\n\nType *0* to go back.`);
+      return sendMessage(phone, `❌ *${inputExt.toUpperCase()} → ${target.toUpperCase()}* isn't supported yet.\n\nSupported: DOCX/PPTX/XLSX → PDF, and PDF → DOCX.\n\nType *0* 🔙 to go back.`);
     }
 
     await sendMessage(phone, '⚙️ Converting your file...\n\n_This may take a moment ⏳_');
 
-    // ── Image → Image (jpg/jpeg/png/webp) ──
     if (IMAGE_FORMATS.includes(inputExt) && IMAGE_FORMATS.includes(target)) {
       inputPath = await downloadFile(mediaUrl, inputExt);
       outputPath = path.join(TEMP_DIR, `${uuidv4()}.${target}`);
@@ -370,17 +356,15 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
       await pipeline.toFile(outputPath);
 
       await sendDocument(phone, outputPath, `converted.${target}`, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${target.toUpperCase()}_`);
-      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
     }
 
-    // ── Image → PDF ──
     if (IMAGE_FORMATS.includes(inputExt) && target === 'pdf') {
       const { PDFDocument } = require('pdf-lib');
 
       inputPath = await downloadFile(mediaUrl, inputExt);
       outputPath = path.join(TEMP_DIR, `${uuidv4()}.pdf`);
 
-      // Normalize to PNG first so pdf-lib can embed it regardless of source format
       normalizedPath = path.join(TEMP_DIR, `${uuidv4()}_norm.png`);
       await sharp(inputPath).png().toFile(normalizedPath);
 
@@ -394,10 +378,9 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
       fs.writeFileSync(outputPath, pdfBytes);
 
       await sendDocument(phone, outputPath, 'converted.pdf', `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → PDF_`);
-      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
     }
 
-    // ── PDF → Image (poppler-utils / pdftoppm — UNTESTED on Render host) ──
     if (inputExt === 'pdf' && IMAGE_FORMATS.includes(target)) {
       const { execFile } = require('child_process');
       inputPath = await downloadFile(mediaUrl, 'pdf');
@@ -420,17 +403,17 @@ const handleFileConvert = async (phone, mediaUrl, mediaType, targetFormat, sendM
 
       outputPath = producedPath;
       await sendImage(phone, outputPath, `✅ *File Converted!*\n\n_PDF → ${target.toUpperCase()}_ (page 1)`);
-      return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
     }
 
-    return sendMessage(phone, `❌ Conversion from *${inputExt.toUpperCase()}* to *${target.toUpperCase()}* is not supported.\n\nType *0* to go back.`);
+    return sendMessage(phone, `❌ Conversion from *${inputExt.toUpperCase()}* to *${target.toUpperCase()}* is not supported.\n\nType *0* 🔙 to go back.`);
 
   } catch (err) {
     console.error('File convert error:', err.message);
     if (err.message === 'PDFTOPPM_MISSING_OR_FAILED' || err.message === 'PDFTOPPM_OUTPUT_MISSING') {
-      return sendMessage(phone, '❌ PDF → Image conversion is unavailable on this server right now (poppler-utils missing or failed).\n\nType *0* to go back.');
+      return sendMessage(phone, '❌ PDF → Image conversion is unavailable on this server right now (poppler-utils missing or failed).\n\nType *0* 🔙 to go back.');
     }
-    return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* to go back.');
+    return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* 🔙 to go back.');
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
@@ -457,7 +440,7 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
         'Authorization': `Bearer ${CONVERTER_TOKEN}`,
       },
       responseType: 'stream',
-      timeout: 600000, // 10 min — large multi-page PDFs via pdf2docx can take a while
+      timeout: 600000,
       validateStatus: () => true,
     });
 
@@ -480,15 +463,15 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
     });
 
     await sendDocument(phone, outputPath, `converted.${target}`, `✅ *File Converted!*\n\n_${inputExt.toUpperCase()} → ${target.toUpperCase()}_`);
-    return sendMessage(phone, 'Type *0* to go back or send another file to convert.');
+    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
 
   } catch (err) {
     console.error('Document convert error:', err.message);
-    let msg = '❌ Conversion failed. Please try again.\n\nType *0* to go back.';
+    let msg = '❌ Conversion failed. Please try again.\n\nType *0* 🔙 to go back.';
     if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
-      msg = '⏱️ Conversion took too long and timed out. Try again in a moment.\n\nType *0* to go back.';
+      msg = '⏱️ Conversion took too long and timed out. Try again in a moment.\n\nType *0* 🔙 to go back.';
     } else if (err.message.includes('not supported')) {
-      msg = `❌ ${err.message}\n\nType *0* to go back.`;
+      msg = `❌ ${err.message}\n\nType *0* 🔙 to go back.`;
     }
     return sendMessage(phone, msg);
   } finally {
@@ -497,9 +480,9 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
   }
 };
 
-//andle multiple imae to pdf
+// ─── MULTI-IMAGE TO PDF ──────────────────────────────────────────────────────
 const MAX_IMAGES_PER_BATCH = 15;
-const MAX_IMAGE_DIMENSION = 1600; // px, longest side
+const MAX_IMAGE_DIMENSION = 1600;
 const JPEG_QUALITY = 75;
 
 const handleMultiImageToPDF = async (phone, mediaUrls, sendMessage, sendDocument) => {
@@ -534,10 +517,10 @@ const handleMultiImageToPDF = async (phone, mediaUrls, sendMessage, sendDocument
 
     const finalSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(1);
     await sendDocument(phone, outputPath, 'combined.pdf', `✅ *${mediaUrls.length} images combined into one PDF!*\n\n_File size: ${finalSizeMB}MB_`);
-    return sendMessage(phone, 'Type *0* to go back or send more images to convert.');
+    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send more images to convert.');
   } catch (err) {
     console.error('Multi-image to PDF error:', err.message);
-    return sendMessage(phone, '❌ Could not combine images into PDF. Please try again.\n\nType *0* to go back.');
+    return sendMessage(phone, '❌ Could not combine images into PDF. Please try again.\n\nType *0* 🔙 to go back.');
   } finally {
     downloadedPaths.forEach(cleanup);
     compressedPaths.forEach(cleanup);
@@ -554,11 +537,10 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
     const isPDF = mediaType.includes('pdf');
 
     if (!isImage && !isPDF) {
-      return sendMessage(phone, '❌ Please send an *image* or *PDF* to watermark.\n\nType *0* to go back.');
+      return sendMessage(phone, '❌ Please send an *image* or *PDF* to watermark.\n\nType *0* 🔙 to go back.');
     }
 
     if (isImage) {
-      // Image watermark using sharp
       const ext = mediaType.includes('png') ? 'png' : 'jpg';
       inputPath = await downloadFile(mediaUrl, ext);
       outputPath = path.join(TEMP_DIR, `${uuidv4()}_watermarked.${ext}`);
@@ -567,7 +549,6 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
       const metadata = await image.metadata();
       const { width, height } = metadata;
 
-      // Create SVG watermark text
       const watermarkText = 'PocketAssist_Bot';
       const fontSize = Math.max(20, Math.floor(width / 20));
       const svgWatermark = Buffer.from(`
@@ -604,10 +585,9 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
         .toFile(outputPath);
 
       await sendImage(phone, outputPath, '🖼️ *Watermarked Image*\n\n_Watermark: PocketAssist_Bot_');
-      return sendMessage(phone, 'Type *0* to go back or send another file.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file.');
 
     } else {
-      // PDF watermark — local via pdf-lib, no API key, no limits, runs on every page
       const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
 
       inputPath = await downloadFile(mediaUrl, 'pdf');
@@ -623,7 +603,6 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
         const fontSize = Math.max(24, Math.floor(width / 14));
         const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
 
-        // Two diagonal passes per page, same look as the image watermark
         page.drawText(watermarkText, {
           x: width / 2 - textWidth / 2,
           y: height / 2,
@@ -646,11 +625,11 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
       fs.writeFileSync(outputPath, watermarkedBytes);
 
       await sendDocument(phone, outputPath, 'watermarked.pdf', '🖼️ *Watermarked PDF*\n\n_Watermark: PocketAssist_Bot_');
-      return sendMessage(phone, 'Type *0* to go back or send another file.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file.');
     }
   } catch (err) {
     console.error('Watermark error:', err.message);
-    return sendMessage(phone, '❌ Watermark failed. Please try again.\n\nType *0* to go back.');
+    return sendMessage(phone, '❌ Watermark failed. Please try again.\n\nType *0* 🔙 to go back.');
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
@@ -667,7 +646,6 @@ const handleESign = async (phone, pdfUrl, signatureImageUrl, sendMessage, sendDo
     pdfPath = await downloadFile(pdfUrl, 'pdf');
     sigPath = await downloadFile(signatureImageUrl, 'png');
 
-    // Resize signature image to reasonable size
     const resizedSigPath = path.join(TEMP_DIR, `${uuidv4()}_sig_resized.png`);
     await sharp(sigPath)
       .resize(200, 80, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
@@ -676,13 +654,11 @@ const handleESign = async (phone, pdfUrl, signatureImageUrl, sendMessage, sendDo
     cleanup(sigPath);
     sigPath = resizedSigPath;
 
-    // Load PDF and embed signature
     const pdfBytes = fs.readFileSync(pdfPath);
     const pdfDoc = await PDFDocument.load(pdfBytes);
     const sigImageBytes = fs.readFileSync(sigPath);
     const sigImage = await pdfDoc.embedPng(sigImageBytes);
 
-    // Add signature to last page bottom right
     const pages = pdfDoc.getPages();
     const lastPage = pages[pages.length - 1];
     const { width, height } = lastPage.getSize();
@@ -699,10 +675,10 @@ const handleESign = async (phone, pdfUrl, signatureImageUrl, sendMessage, sendDo
     fs.writeFileSync(outputPath, signedPdfBytes);
 
     await sendDocument(phone, outputPath, 'signed_document.pdf', '✍️ *Document Signed!*\n\nYour signature has been added to the last page.');
-    return sendMessage(phone, 'Type *0* to go back or send another document.');
+    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another document.');
   } catch (err) {
     console.error('E-Sign error:', err.message);
-    return sendMessage(phone, '❌ Signing failed. Make sure you sent a valid PDF.\n\nType *0* to go back.');
+    return sendMessage(phone, '❌ Signing failed. Make sure you sent a valid PDF.\n\nType *0* 🔙 to go back.');
   } finally {
     cleanup(pdfPath);
     cleanup(sigPath);
@@ -718,7 +694,6 @@ const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, s
     inputPath = await downloadFile(mediaUrl, 'jpg');
     outputPath = path.join(TEMP_DIR, `${uuidv4()}_sticker.webp`);
 
-    // Convert to 512x512 WebP (WhatsApp sticker format)
     await sharp(inputPath)
       .resize(512, 512, {
         fit: 'contain',
@@ -727,24 +702,22 @@ const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, s
       .webp({ quality: 80 })
       .toFile(outputPath);
 
-    // Check file was created
     if (!fs.existsSync(outputPath)) {
       throw new Error('Sticker file not created');
     }
 
     try {
       await sendSticker(phone, outputPath);
-      return sendMessage(phone, '🎨 *Sticker created!*\n\nType *0* to go back or send another image.');
+      return sendMessage(phone, '🎨 *Sticker created!*\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another image.');
     } catch (sendErr) {
       console.error('Sticker send error:', sendErr.message);
-      // If sticker sending fails, send as image instead
       await sendMessage(phone, '⚠️ Could not send as sticker. Sending as image instead...');
       await sendImage(phone, outputPath, '🎨 Your sticker (WebP format)');
-      return sendMessage(phone, 'Type *0* to go back or send another image.');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another image.');
     }
   } catch (err) {
     console.error('Sticker error:', err.message);
-    return sendMessage(phone, '❌ Sticker creation failed. Please send a clear image and try again.\n\nType *0* to go back.');
+    return sendMessage(phone, '❌ Sticker creation failed. Please send a clear image and try again.\n\nType *0* 🔙 to go back.');
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
@@ -764,5 +737,3 @@ module.exports = {
   handleESign,
   handleStickerCreator,
 };
-
-
