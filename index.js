@@ -56,14 +56,14 @@ const enqueueJob = (phone, run, sendMessage, position) => {
 
 // ─── SEND FUNCTIONS ───────────────────────────────────────────────────────────
 
-const sendMessage = async (phone, text) => {
+const sendImageUrl = async (phone, imageUrl, caption = '') => {
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: 'whatsapp',
       to: phone,
-      type: 'text',
-      text: { body: text }
+      type: 'image',
+      image: { link: imageUrl, caption }
     },
     { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
   );
@@ -247,7 +247,7 @@ app.post('/webhook', async (req, res) => {
     const access = await checkAccess(phone);
     
     // Run onboarding for new users
-    const isNewUser = await onboardingFlow(user, text, sendMessage);
+    const isNewUser = await onboardingFlow(user, text, sendMessage, sendImageUrl);
     if (isNewUser) return;
 
     // Build the job function

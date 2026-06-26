@@ -11,13 +11,9 @@ const handleLinkCommand = async (phone, messageText, sendMessage) => {
 
   if (!result.success) {
     if (result.reason === 'ALREADY_LINKED_HERE') {
-      await sendMessage(phone,
-        `✅ This phone is already linked to *${pocketId}*.`
-      );
+      await sendMessage(phone, `✅ This phone is already linked to *${pocketId}*.`);
     } else {
-      await sendMessage(phone,
-        `❌ No account found with Pocket ID *${pocketId}*.\n\nDouble-check the code and try again.`
-      );
+      await sendMessage(phone, `❌ No account found with Pocket ID *${pocketId}*.\n\nDouble-check the code and try again.`);
     }
     return true;
   }
@@ -36,9 +32,11 @@ Type *MENU* to get started.`
   return true;
 };
 
-const onboardingFlow = async (user, message, sendMessage) => {
+const onboardingFlow = async (user, message, sendMessage, sendImageUrl) => {
   const phone = user.phone;
   if (user.onboarded) return false;
+
+  await sendImageUrl(phone, 'https://res.cloudinary.com/dmldf1kno/image/upload/f_auto,q_auto/pocketassist_onboarding_card_v2_-_Copy_wwdwyg');
 
   await sendMessage(phone,
     `━━━━━━━━━━━━━━━━━━
