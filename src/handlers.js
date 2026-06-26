@@ -100,7 +100,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '🤔 Thinking...');
       const answer = await askGroq(PROMPTS.aiQA(text));
       await incrementDailyCount(phone);
-      return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nAsk another question or type *0* to go back`);
+      return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nAsk another question or type *0* 🔙 to go back`);
     }
 
     // 2 ── Smart Reply (Free)
@@ -114,7 +114,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '✍️ Generating replies...');
       const replies = await askGroq(PROMPTS.smartReply(text));
       await incrementDailyCount(phone);
-      return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nPaste another message or type *0* to go back`);
+      return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
     }
 
     // 3 ── Translator (Premium) — natural 2-step flow
@@ -135,7 +135,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const translated = await askGroq(PROMPTS.translator(session.data.text, text));
       await incrementDailyCount(phone);
       setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
-      return sendMessage(phone, `🌍 *Translation (${text}):*\n\n${translated}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType another text to translate or *0* to go back`);
+      return sendMessage(phone, `🌍 *Translation (${text}):*\n\n${translated}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType another text to translate or *0* 🔙 to go back`);
     }
 
     // 4 ── Caption Generator (Premium) — natural 2-step flow
@@ -156,7 +156,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const captions = await askGroq(PROMPTS.captionGen(session.data.description, text));
       await incrementDailyCount(phone);
       setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
-      return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nDescribe another post or type *0* to go back`);
+      return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nDescribe another post or type *0* 🔙 to go back`);
     }
 
     // 5 ── Plagiarism Rewriter (Premium)
@@ -176,12 +176,12 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000))
         ]);
         await incrementDailyCount(phone);
-        return sendMessage(phone, `✅ *Rewritten:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nPaste another passage or type *0* to go back`);
+        return sendMessage(phone, `✅ *Rewritten:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another passage or type *0* 🔙 to go back`);
       } catch (err) {
         if (err.message === 'timeout') {
-          return sendMessage(phone, '⏱️ This is taking longer than expected.\n\nTry sending a *shorter passage* (one paragraph at a time).\n\nPaste a shorter text or type *0* to go back.');
+          return sendMessage(phone, '⏱️ This is taking longer than expected.\n\nTry sending a *shorter passage* (one paragraph at a time).\n\nPaste a shorter text or type *0* 🔙 to go back.');
         }
-        return sendMessage(phone, '❌ Rewrite failed. Please try again.\n\nType *0* to go back.');
+        return sendMessage(phone, '❌ Rewrite failed. Please try again.\n\nType *0* 🔙 to go back.');
       }
     }
   }
@@ -218,7 +218,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
         if (isImage) {
           if (images.length >= 15) {
-            return sendMessage(phone, `⚠️ Batch limit reached (15 images max).\n\nType *PDF* now to combine what you've sent, or *0* to start over.`);
+            return sendMessage(phone, `⚠️ Batch limit reached (15 images max).\n\nType *PDF* now to combine what you've sent, or *0* 🔙 to start over.`);
           }
 
           images.push({ mediaUrl, mediaType });
@@ -248,7 +248,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       }
 
       if (target !== 'pdf') {
-        return sendMessage(phone, `❌ ${images.length} images can only be combined into one *PDF*.\n\nType *PDF* to continue, or *0* to go back and convert a single image to another format instead.`);
+        return sendMessage(phone, `❌ ${images.length} images can only be combined into one *PDF*.\n\nType *PDF* to continue, or *0* 🔙 to go back and convert a single image to another format instead.`);
       }
 
       await incrementDailyCount(phone);
@@ -262,7 +262,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await incrementDailyCount(phone);
      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
       setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
-      return sendMessage(phone, '─────────────────\nSend another file or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another file or type *0* 🔙 to go back');
     }
 
     // 3 ── Voice Transcriber (Free)
@@ -278,7 +278,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
       await handleVoiceTranscriber(phone, mediaUrl, sendMessage);
-      return sendMessage(phone, '─────────────────\nSend another voice message or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another voice message or type *0* 🔙 to go back');
     }
 
     // 4 ── URL Shortener (Free)
@@ -291,7 +291,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
       await handleURLShortener(phone, text, sendMessage);
-      return sendMessage(phone, '─────────────────\nPaste another link or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another link or type *0* 🔙 to go back');
     }
 
     // 5 ── QR Code (Free)
@@ -317,7 +317,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
       await handleWebpageReader(phone, text, sendMessage);
-      return sendMessage(phone, '─────────────────\nPaste another URL or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another URL or type *0* 🔙 to go back');
     }
 
     // 7 ── Watermark (Premium)
@@ -362,7 +362,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await incrementDailyCount(phone);
       await handleESign(phone, session.data.pdfUrl, mediaUrl, sendMessage, sendDocument);
       setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
-      return sendMessage(phone, '─────────────────\nSend another PDF to sign or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another PDF to sign or type *0* 🔙 to go back');
     }
 
     // 9 ── Sticker Creator (Premium)
@@ -393,7 +393,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     }
     if (session.step === 'socialdl') {
       await handleSocialDL(phone, text, sendMessage, sendVideo);
-      return sendMessage(phone, '─────────────────\nPaste another link or type *0* to go back');
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another link or type *0* 🔙 to go back');
     }
 
     // 11 ── WhatsApp Link Generator (Free)
@@ -418,7 +418,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         : `https://wa.me/${number}`;
 
       await incrementDailyCount(phone);
-      return sendMessage(phone, `💬 *WhatsApp Link:*\n\n${link}\n\n_Anyone can click this to open a chat with +${number}_\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nEnter another number or type *0* to go back`);
+      return sendMessage(phone, `💬 *WhatsApp Link:*\n\n${link}\n\n_Anyone can click this to open a chat with +${number}_\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nEnter another number or type *0* 🔙 to go back`);
     }
   }
 
@@ -446,7 +446,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         if (!allowed) return sendMessage(phone, guardMessage(acc, false));
         await incrementDailyCount(phone);
         resetToSubmenu(phone, 'student');
-        return sendMessage(phone, `📊 *CGPA Result*\n━━━━━━━━━━━━━━\nCourses: ${courses.length}\nTotal Units: ${totalUnits}\n\n🎓 *CGPA: ${cgpa}*\n🏅 *${classification}*\n\n_${acc.remainingFree - 1} free uses left today_\n\n─────────────────\nType *1* to calculate again or *0* to go back`);
+        return sendMessage(phone, `📊 *CGPA Result*\n━━━━━━━━━━━━━━\nCourses: ${courses.length}\nTotal Units: ${totalUnits}\n\n🎓 *CGPA: ${cgpa}*\n🏅 *${classification}*\n\n_${acc.remainingFree - 1} free uses left today_\n\n━━━━━━━━━━━━━━\nType *1* to calculate again or *0* 🔙 to go back`);
       }
       const parts = text.trim().split(/\s+/);
       if (parts.length >= 3) {
@@ -472,7 +472,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const cv = await askGroq(PROMPTS.cvBuilder(text));
       await incrementDailyCount(phone);
       resetToSubmenu(phone, 'student');
-      return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *2* to build another or *0* to go back`);
+      return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *2* to build another or *0* 🔙 to go back`);
     }
 
     // 3 ── Assignment Writer (Premium)
@@ -494,7 +494,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const assignment = await askGroq(PROMPTS.assignmentWriter(session.data.topic, details));
       await incrementDailyCount(phone);
       resetToSubmenu(phone, 'student');
-      return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *3* to write another or *0* to go back`);
+      return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *3* to write another or *0* 🔙 to go back`);
     }
 
     // 4 ── Past Question Solver (Premium)
@@ -515,7 +515,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const solution = await askGroq(PROMPTS.pastQSolver(text, session.data.course));
       await incrementDailyCount(phone);
       resetToSubmenu(phone, 'student');
-      return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *4* to solve another or *0* to go back`);
+      return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *4* to solve another or *0* 🔙 to go back`);
     }
 
     // 5 ── Cover Letter (Premium)
@@ -534,7 +534,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const letter = await askGroq(PROMPTS.coverLetter(parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
       await incrementDailyCount(phone);
       resetToSubmenu(phone, 'student');
-      return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n─────────────────\nType *5* to write another or *0* to go back`);
+      return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *5* to write another or *0* 🔙 to go back`);
     }
   }
 
