@@ -288,6 +288,7 @@ app.post('/webhook', async (req, res) => {
 
   } catch (err) {
     console.error('Webhook error:', err.message);
+    console.error(err.stack);
   }
 });
 
