@@ -17,21 +17,13 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
 
 // ─── GLOBAL REQUEST QUEUE ─────────────────────────────────────────────────────
-// Max 2 heavy tasks running at the same time on Render free tier
 const MAX_CONCURRENT = 2;
 let activeJobs = 0;
 const jobQueue = [];
 
-// Heavy tools that must go through the queue
 const HEAVY_STEPS = [
-  'socialdl',
-  'convert_format',
-  'watermark',
-  'esign_sig',
-  'voice',
-  'web',
-  'ocr',
-  'rewrite',
+  'socialdl', 'convert_format', 'watermark',
+  'esign_sig', 'voice', 'web', 'ocr', 'rewrite',
 ];
 
 const isHeavyStep = (step) => HEAVY_STEPS.includes(step);
@@ -42,7 +34,7 @@ const processQueue = () => {
   activeJobs++;
   next.run().finally(() => {
     activeJobs--;
-    processQueue(); // process next in queue
+    processQueue();
   });
 };
 
@@ -55,6 +47,19 @@ const enqueueJob = (phone, run, sendMessage, position) => {
 };
 
 // ─── SEND FUNCTIONS ───────────────────────────────────────────────────────────
+
+const sendMessage = async (phone, text) => {
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'text',
+      text: { body: text }
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+};
 
 const sendImageUrl = async (phone, imageUrl, caption = '') => {
   await axios.post(
@@ -173,7 +178,6 @@ const sendSticker = async (phone, stickerPath) => {
   );
 };
 
-// Get WhatsApp media URL from media ID
 const getMediaUrl = async (mediaId) => {
   const res = await axios.get(
     `https://graph.facebook.com/v19.0/${mediaId}`,
@@ -199,7 +203,7 @@ app.get('/webhook', (req, res) => {
 // ─── WEBHOOK MESSAGE HANDLER ──────────────────────────────────────────────────
 
 app.post('/webhook', async (req, res) => {
-  res.sendStatus(200); // Always respond immediately to Meta
+  res.sendStatus(200);
 
   try {
     const entry = req.body?.entry?.[0];
@@ -235,54 +239,37 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Check for LINK command BEFORE touching/creating any account for this phone
     if (msgType === 'text') {
       const handled = await handleLinkCommand(phone, text, sendMessage);
       if (handled) return;
     }
 
-    // Get or create user
     let user = await getOrCreateUser(phone);
     user = await checkAndResetDaily(user);
     const access = await checkAccess(phone);
-    
-    // Run onboarding for new users
+
     const isNewUser = await onboardingFlow(user, text, sendMessage, sendImageUrl);
     if (isNewUser) return;
 
-    // Build the job function
     const job = () => handleMessage(
-      phone,
-      text,
-      mediaUrl,
-      mediaType,
-      sendMessage,
-      sendImage,
-      sendVideo,
-      sendDocument,
-      sendSticker,
-      user,
-      access
+      phone, text, mediaUrl, mediaType,
+      sendMessage, sendImage, sendVideo,
+      sendDocument, sendSticker, user, access
     );
 
-    // Check if this is a heavy step that needs queuing
-    // We peek at session step via a lightweight session check
     const { getSessionStep } = require('./src/handlers');
     const currentStep = getSessionStep(phone);
 
     if (isHeavyStep(currentStep) && activeJobs >= MAX_CONCURRENT) {
-      // Queue it and notify user of position
       const position = jobQueue.length + 1;
       enqueueJob(phone, job, sendMessage, position);
     } else if (isHeavyStep(currentStep)) {
-      // Slot available — run immediately but still track it
       activeJobs++;
       job().finally(() => {
         activeJobs--;
         processQueue();
       });
     } else {
-      // Light task — run immediately, no queue
       job();
     }
 
@@ -297,6 +284,7 @@ app.post('/webhook', async (req, res) => {
 app.get('/', (req, res) => {
   res.send(`🤖 PocketAssist is running! | Active jobs: ${activeJobs} | Queued: ${jobQueue.length}`);
 });
+
 app.get('/privacy', (req, res) => {
   res.send(`
     <h1>PocketAssist Privacy Policy</h1>
