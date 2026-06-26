@@ -59,7 +59,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
   const session = getSession(phone);
 
   // ── Global commands ──────────────────────────────────────────────────────
-  if (upper === 'MENU' || upper === 'HI' || upper === 'HELLO' || upper === 'START') {
+  if (upper === 'MENU' || upper === 'HI' || upper === 'HELLO' || upper === 'HEY' || upper === 'START' || text === '👋') {
     clearSession(phone);
     return sendMessage(phone, getMainMenu());
   }
