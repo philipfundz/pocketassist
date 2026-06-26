@@ -1,6 +1,6 @@
 const Groq = require('groq-sdk');
 const { canUseTools } = require('./auth');
-const { incrementDailyCount } = require('./database');
+const { incrementDailyCount, getSession, setSession, clearSession } = require('./database');
 const { guardMessage } = require('./premiumGuard');
 const PROMPTS = require('./prompts');
 const {
@@ -18,7 +18,7 @@ const {
   handleVoiceTranscriber,
   handleWebpageReader,
   handleSocialDL,
-  handleFileConvert,    
+  handleFileConvert,
   handleMultiImageToPDF,
   handleWatermark,
   handleESign,
@@ -27,13 +27,10 @@ const {
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// ─── SESSION STORE ────────────────────────────────────────────────────────────
-const sessions = new Map();
-
-const getSession = (phone) => sessions.get(phone) || { menu: 'main', step: null, data: {} };
-const setSession = (phone, session) => sessions.set(phone, session);
-const clearSession = (phone) => sessions.set(phone, { menu: 'main', step: null, data: {} });
-const resetToSubmenu = (phone, menu) => sessions.set(phone, { menu, step: null, data: {} });
+// ─── SESSION HELPERS ──────────────────────────────────────────────────────────
+const resetToSubmenu = async (phone, menu) => {
+  await setSession(phone, { menu, step: null, data: {} });
+};
 
 const getSubmenuMessage = (menu) => {
   if (menu === 'ai') return getAIToolsMenu();
@@ -56,11 +53,11 @@ const askGroq = async (prompt) => {
 const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, sendImage, sendVideo, sendDocument, sendSticker, user, access) => {
   const text = message?.trim() || '';
   const upper = text.toUpperCase();
-  const session = getSession(phone);
+  const session = await getSession(phone);
 
   // ── Global commands ──────────────────────────────────────────────────────
   if (upper === 'MENU' || upper === 'HI' || upper === 'HELLO' || upper === 'HEY' || upper === 'START' || text === '👋') {
-    clearSession(phone);
+    await clearSession(phone);
     return sendMessage(phone, getMainMenu());
   }
 
@@ -71,18 +68,18 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
   // ── Back / 0 ─────────────────────────────────────────────────────────────
   if (upper === '0' || upper === 'BACK') {
     if (session.step) {
-      resetToSubmenu(phone, session.menu);
+      await resetToSubmenu(phone, session.menu);
       return sendMessage(phone, getSubmenuMessage(session.menu));
     }
-    clearSession(phone);
+    await clearSession(phone);
     return sendMessage(phone, getMainMenu());
   }
 
   // ─── MAIN MENU ────────────────────────────────────────────────────────────
   if (session.menu === 'main') {
-    if (text === '1') { setSession(phone, { menu: 'ai',      step: null, data: {} }); return sendMessage(phone, getAIToolsMenu()); }
-    if (text === '2') { setSession(phone, { menu: 'file',    step: null, data: {} }); return sendMessage(phone, getFileToolsMenu()); }
-    if (text === '3') { setSession(phone, { menu: 'student', step: null, data: {} }); return sendMessage(phone, getStudentToolsMenu()); }
+    if (text === '1') { await setSession(phone, { menu: 'ai',      step: null, data: {} }); return sendMessage(phone, getAIToolsMenu()); }
+    if (text === '2') { await setSession(phone, { menu: 'file',    step: null, data: {} }); return sendMessage(phone, getFileToolsMenu()); }
+    if (text === '3') { await setSession(phone, { menu: 'student', step: null, data: {} }); return sendMessage(phone, getStudentToolsMenu()); }
     if (text === '4') { return sendMessage(phone, getAccountMenu(user, access.remainingFree)); }
   }
 
@@ -91,7 +88,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 1 ── AI Q&A (Free)
     if (text === '1' && !session.step) {
-      setSession(phone, { menu: 'ai', step: 'aiqa', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'aiqa', data: {} });
       return sendMessage(phone, '🧠 *AI Q&A*\n\nAsk me anything! Type your question:');
     }
     if (session.step === 'aiqa') {
@@ -105,7 +102,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 2 ── Smart Reply (Free)
     if (text === '2' && !session.step) {
-      setSession(phone, { menu: 'ai', step: 'smartreply', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'smartreply', data: {} });
       return sendMessage(phone, '✍️ *AI Smart Reply*\n\nPaste the message you want to reply to:');
     }
     if (session.step === 'smartreply') {
@@ -117,15 +114,15 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
     }
 
-    // 3 ── Translator (Premium) — natural 2-step flow
+    // 3 ── Translator (Premium)
     if (text === '3' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
       return sendMessage(phone, '🌍 *Translator*\n\nWhat text do you want to translate?\n\nType it below:');
     }
     if (session.step === 'translate_text') {
-      setSession(phone, { menu: 'ai', step: 'translate_lang', data: { text } });
+      await setSession(phone, { menu: 'ai', step: 'translate_lang', data: { text } });
       return sendMessage(phone, `📝 Got it!\n\n_"${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"_\n\nWhat language should I translate it to?\n(e.g. Igbo, Yoruba, French, Arabic)`);
     }
     if (session.step === 'translate_lang') {
@@ -134,19 +131,19 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '🌍 Translating...');
       const translated = await askGroq(PROMPTS.translator(session.data.text, text));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
       return sendMessage(phone, `🌍 *Translation (${text}):*\n\n${translated}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType another text to translate or *0* 🔙 to go back`);
     }
 
-    // 4 ── Caption Generator (Premium) — natural 2-step flow
+    // 4 ── Caption Generator (Premium)
     if (text === '4' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
       return sendMessage(phone, '📱 *Caption Generator*\n\nDescribe your post or photo:\n(e.g. _Sunset at the beach with friends_)');
     }
     if (session.step === 'caption_desc') {
-      setSession(phone, { menu: 'ai', step: 'caption_platform', data: { description: text } });
+      await setSession(phone, { menu: 'ai', step: 'caption_platform', data: { description: text } });
       return sendMessage(phone, `✅ Got it!\n\n_"${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"_\n\nWhich platform is this for?\n(e.g. Instagram, TikTok, Twitter, Facebook, LinkedIn)`);
     }
     if (session.step === 'caption_platform') {
@@ -155,7 +152,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '✨ Generating captions...');
       const captions = await askGroq(PROMPTS.captionGen(session.data.description, text));
       await incrementDailyCount(phone);
-      setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
       return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nDescribe another post or type *0* 🔙 to go back`);
     }
 
@@ -163,7 +160,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '5' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
+      await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
       return sendMessage(phone, '🔄 *Plagiarism Rewriter*\n\nPaste the text you want rewritten:\n_(Tip: one paragraph at a time works best)_');
     }
     if (session.step === 'rewrite') {
@@ -191,7 +188,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 1 ── OCR (Free)
     if (text === '1' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'ocr', data: {} });
+      await setSession(phone, { menu: 'file', step: 'ocr', data: {} });
       return sendMessage(phone, '🔍 *OCR — Extract Text*\n\nSend me an image and I\'ll extract the text from it:');
     }
     if (session.step === 'ocr') {
@@ -205,9 +202,9 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return;
     }
 
-    // 2 ── File Convert (Free) — supports multi-image → single PDF
+    // 2 ── File Convert (Free)
     if (text === '2' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
+      await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
       return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF._\n\n_Send your file now:_`);
     }
     if (session.step === 'convert_file') {
@@ -222,13 +219,13 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
           }
 
           images.push({ mediaUrl, mediaType });
-          setSession(phone, { menu: 'file', step: 'convert_file', data: { images } });
+          await setSession(phone, { menu: 'file', step: 'convert_file', data: { images } });
 
           const remaining = 15 - images.length;
           return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
         }
 
-        setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
+        await setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
         return sendMessage(phone, `✅ File received!\n\nWhat format do you want to convert it to?\n\nExamples: *PDF, DOCX, JPG, PNG, XLSX*\n\nType the format name:`);
       }
 
@@ -243,7 +240,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (images.length === 1) {
         await incrementDailyCount(phone);
         await handleFileConvert(phone, images[0].mediaUrl, images[0].mediaType, target, sendMessage, sendDocument, sendImage);
-        setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
+        await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
         return;
       }
 
@@ -253,21 +250,21 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
       await incrementDailyCount(phone);
       await handleMultiImageToPDF(phone, images.map(i => i.mediaUrl), sendMessage, sendDocument);
-      setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
+      await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
       return;
     }
     if (session.step === 'convert_format') {
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-     await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
-      setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
+      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
+      await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
       return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another file or type *0* 🔙 to go back');
     }
 
     // 3 ── Voice Transcriber (Free)
     if (text === '3' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'voice', data: {} });
+      await setSession(phone, { menu: 'file', step: 'voice', data: {} });
       return sendMessage(phone, '🎙️ *Voice Transcriber*\n\nSend me a voice message and I\'ll transcribe it:');
     }
     if (session.step === 'voice') {
@@ -283,7 +280,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 4 ── URL Shortener (Free)
     if (text === '4' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'url', data: {} });
+      await setSession(phone, { menu: 'file', step: 'url', data: {} });
       return sendMessage(phone, '🔗 *URL Shortener*\n\nPaste the link you want to shorten:');
     }
     if (session.step === 'url') {
@@ -296,7 +293,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 5 ── QR Code (Free)
     if (text === '5' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'qr', data: {} });
+      await setSession(phone, { menu: 'file', step: 'qr', data: {} });
       return sendMessage(phone, '📱 *QR Code Generator*\n\nEnter the text or link for your QR code:');
     }
     if (session.step === 'qr') {
@@ -309,7 +306,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 6 ── Web Reader (Free)
     if (text === '6' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'web', data: {} });
+      await setSession(phone, { menu: 'file', step: 'web', data: {} });
       return sendMessage(phone, '🌐 *Webpage Reader*\n\nPaste the URL you want me to read and summarize:');
     }
     if (session.step === 'web') {
@@ -324,7 +321,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '7' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'file', step: 'watermark', data: {} });
+      await setSession(phone, { menu: 'file', step: 'watermark', data: {} });
       return sendMessage(phone, '🖼️ *Watermark*\n\nSend me an image or PDF and I\'ll add a *PocketAssist_Bot* watermark to it:');
     }
     if (session.step === 'watermark') {
@@ -335,7 +332,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await incrementDailyCount(phone);
       await handleWatermark(phone, mediaUrl, mediaType, sendMessage, sendImage, sendDocument);
-      setSession(phone, { menu: 'file', step: 'watermark', data: {} });
+      await setSession(phone, { menu: 'file', step: 'watermark', data: {} });
       return;
     }
 
@@ -343,14 +340,14 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '8' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
+      await setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
       return sendMessage(phone, '✍️ *E-Sign*\n\nFirst, send me the *PDF* you want to sign:');
     }
     if (session.step === 'esign_pdf') {
       if (!mediaUrl || !mediaType?.includes('pdf')) {
         return sendMessage(phone, '📄 Please send a *PDF* file to sign.');
       }
-      setSession(phone, { menu: 'file', step: 'esign_sig', data: { pdfUrl: mediaUrl } });
+      await setSession(phone, { menu: 'file', step: 'esign_sig', data: { pdfUrl: mediaUrl } });
       return sendMessage(phone, '✅ PDF received!\n\nNow send me your *signature image*:\n_(Take a photo of your signature on white paper)_');
     }
     if (session.step === 'esign_sig') {
@@ -361,7 +358,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await incrementDailyCount(phone);
       await handleESign(phone, session.data.pdfUrl, mediaUrl, sendMessage, sendDocument);
-      setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
+      await setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
       return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another PDF to sign or type *0* 🔙 to go back');
     }
 
@@ -369,7 +366,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '9' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'file', step: 'sticker', data: {} });
+      await setSession(phone, { menu: 'file', step: 'sticker', data: {} });
       return sendMessage(phone, '🎨 *Sticker Creator*\n\nSend me an image and I\'ll convert it to a WhatsApp sticker:');
     }
     if (session.step === 'sticker') {
@@ -380,7 +377,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await incrementDailyCount(phone);
       await handleStickerCreator(phone, mediaUrl, sendMessage, sendSticker, sendImage);
-      setSession(phone, { menu: 'file', step: 'sticker', data: {} });
+      await setSession(phone, { menu: 'file', step: 'sticker', data: {} });
       return;
     }
 
@@ -388,7 +385,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '10' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'file', step: 'socialdl', data: {} });
+      await setSession(phone, { menu: 'file', step: 'socialdl', data: {} });
       return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 5 min / 15MB)_');
     }
     if (session.step === 'socialdl') {
@@ -398,7 +395,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 11 ── WhatsApp Link Generator (Free)
     if (text === '11' && !session.step) {
-      setSession(phone, { menu: 'file', step: 'walink', data: {} });
+      await setSession(phone, { menu: 'file', step: 'walink', data: {} });
       return sendMessage(phone, '💬 *WhatsApp Link Generator*\n\nEnter a phone number with country code:\n(e.g. _2348012345678_)\n\nOptionally add a message:\nFormat: *number | message*\nExample: _2348012345678 | Hello, I saw your listing_');
     }
     if (session.step === 'walink') {
@@ -427,7 +424,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
     // 1 ── CGPA Calculator (Free)
     if (text === '1' && !session.step) {
-      setSession(phone, { menu: 'student', step: 'cgpa', data: { courses: [] } });
+      await setSession(phone, { menu: 'student', step: 'cgpa', data: { courses: [] } });
       return sendMessage(phone, `📊 *CGPA Calculator*\n\nEnter courses one per line:\nFormat: *CourseCode Grade Units*\nExample: _MTH101 A 3_\n\nType *DONE* when finished.`);
     }
     if (session.step === 'cgpa') {
@@ -445,14 +442,14 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         const { allowed, access: acc } = await canUseTools(phone, false);
         if (!allowed) return sendMessage(phone, guardMessage(acc, false));
         await incrementDailyCount(phone);
-        resetToSubmenu(phone, 'student');
+        await resetToSubmenu(phone, 'student');
         return sendMessage(phone, `📊 *CGPA Result*\n━━━━━━━━━━━━━━\nCourses: ${courses.length}\nTotal Units: ${totalUnits}\n\n🎓 *CGPA: ${cgpa}*\n🏅 *${classification}*\n\n_${acc.remainingFree - 1} free uses left today_\n\n━━━━━━━━━━━━━━\nType *1* to calculate again or *0* 🔙 to go back`);
       }
       const parts = text.trim().split(/\s+/);
       if (parts.length >= 3) {
         const course = { code: parts[0], grade: parts[1], units: parseInt(parts[2]) };
         session.data.courses.push(course);
-        setSession(phone, session);
+        await setSession(phone, session);
         return sendMessage(phone, `✅ Added: *${course.code}* (${course.grade}, ${course.units} units)\nTotal so far: ${session.data.courses.length} course(s)\n\nContinue adding or type *DONE*`);
       }
       return sendMessage(phone, `❌ Wrong format. Use:\n*CourseCode Grade Units*\nExample: _MTH101 A 3_`);
@@ -462,7 +459,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '2' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'student', step: 'cv', data: {} });
+      await setSession(phone, { menu: 'student', step: 'cv', data: {} });
       return sendMessage(phone, '📋 *CV Builder*\n\nSend your details in this format:\n\n*Name:*\n*Email:*\n*Phone:*\n*Education:*\n*Skills:*\n*Experience:*\n*Objective:*');
     }
     if (session.step === 'cv') {
@@ -471,7 +468,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📋 Building your CV...\n\n_This may take a moment ⏳_');
       const cv = await askGroq(PROMPTS.cvBuilder(text));
       await incrementDailyCount(phone);
-      resetToSubmenu(phone, 'student');
+      await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *2* to build another or *0* 🔙 to go back`);
     }
 
@@ -479,11 +476,11 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '3' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'student', step: 'assign_topic', data: {} });
+      await setSession(phone, { menu: 'student', step: 'assign_topic', data: {} });
       return sendMessage(phone, '📝 *Assignment Writer*\n\nWhat is the topic of your assignment?');
     }
     if (session.step === 'assign_topic') {
-      setSession(phone, { menu: 'student', step: 'assign_details', data: { topic: text } });
+      await setSession(phone, { menu: 'student', step: 'assign_details', data: { topic: text } });
       return sendMessage(phone, `📝 Topic: *${text}*\n\nAny specific instructions or details?\n(or type *SKIP* to continue)`);
     }
     if (session.step === 'assign_details') {
@@ -493,7 +490,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📝 Writing your assignment...\n\n_This may take a moment ⏳_');
       const assignment = await askGroq(PROMPTS.assignmentWriter(session.data.topic, details));
       await incrementDailyCount(phone);
-      resetToSubmenu(phone, 'student');
+      await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *3* to write another or *0* 🔙 to go back`);
     }
 
@@ -501,11 +498,11 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '4' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'student', step: 'pastq_course', data: {} });
+      await setSession(phone, { menu: 'student', step: 'pastq_course', data: {} });
       return sendMessage(phone, '📚 *Past Question Solver*\n\nWhat course is this question from?\n(e.g. MTH101, ECO201)');
     }
     if (session.step === 'pastq_course') {
-      setSession(phone, { menu: 'student', step: 'pastq_question', data: { course: text } });
+      await setSession(phone, { menu: 'student', step: 'pastq_question', data: { course: text } });
       return sendMessage(phone, `📚 Course: *${text}*\n\nNow paste your question:`);
     }
     if (session.step === 'pastq_question') {
@@ -514,7 +511,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📚 Solving your question...\n\n_This may take a moment ⏳_');
       const solution = await askGroq(PROMPTS.pastQSolver(text, session.data.course));
       await incrementDailyCount(phone);
-      resetToSubmenu(phone, 'student');
+      await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *4* to solve another or *0* 🔙 to go back`);
     }
 
@@ -522,7 +519,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     if (text === '5' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      setSession(phone, { menu: 'student', step: 'cover', data: {} });
+      await setSession(phone, { menu: 'student', step: 'cover', data: {} });
       return sendMessage(phone, '📨 *Cover Letter*\n\nSend your details:\nFormat: *Name | Position | Company | Skills*\nExample: _Philip | Software Intern | Google | Python, Node.js_');
     }
     if (session.step === 'cover') {
@@ -533,7 +530,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '📨 Writing your cover letter...\n\n_This may take a moment ⏳_');
       const letter = await askGroq(PROMPTS.coverLetter(parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
       await incrementDailyCount(phone);
-      resetToSubmenu(phone, 'student');
+      await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *5* to write another or *0* 🔙 to go back`);
     }
   }
@@ -543,8 +540,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 };
 
 // Export session step checker for queue system in index.js
-const getSessionStep = (phone) => {
-  const session = getSession(phone);
+const getSessionStep = async (phone) => {
+  const session = await getSession(phone);
   return session.step || null;
 };
 

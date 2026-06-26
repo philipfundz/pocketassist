@@ -6,7 +6,7 @@ const FormData = require('form-data');
 const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
 const { onboardingFlow, handleLinkCommand } = require('./src/onboarding');
-const { handleMessage } = require('./src/handlers');
+const { handleMessage, getSessionStep } = require('./src/handlers');
 
 const app = express();
 app.use(express.json());
@@ -257,9 +257,7 @@ app.post('/webhook', async (req, res) => {
       sendDocument, sendSticker, user, access
     );
 
-    const { getSessionStep } = require('./src/handlers');
-    const currentStep = getSessionStep(phone);
-
+     const currentStep = await getSessionStep(phone);
     if (isHeavyStep(currentStep) && activeJobs >= MAX_CONCURRENT) {
       const position = jobQueue.length + 1;
       enqueueJob(phone, job, sendMessage, position);

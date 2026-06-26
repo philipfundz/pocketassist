@@ -138,11 +138,49 @@ const setOnboarded = async (phone) => {
   if (error) throw error;
 };
 
+const getSession = async (phone) => {
+  const { data: link } = await supabase
+    .from('linked_phones')
+    .select('account_id')
+    .eq('phone', phone)
+    .single();
+  if (!link) return { menu: 'main', step: null, data: {} };
+
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('session')
+    .eq('id', link.account_id)
+    .single();
+
+  return account?.session || { menu: 'main', step: null, data: {} };
+};
+
+const setSession = async (phone, session) => {
+  const { data: link } = await supabase
+    .from('linked_phones')
+    .select('account_id')
+    .eq('phone', phone)
+    .single();
+  if (!link) return;
+
+  await supabase
+    .from('accounts')
+    .update({ session })
+    .eq('id', link.account_id);
+};
+
+const clearSession = async (phone) => {
+  await setSession(phone, { menu: 'main', step: null, data: {} });
+};
+
 module.exports = {
   supabase,
   getOrCreateUser,
   linkPhoneToAccount,
   checkAndResetDaily,
   incrementDailyCount,
-  setOnboarded
+  setOnboarded,
+  getSession,
+  setSession,
+  clearSession
 };
