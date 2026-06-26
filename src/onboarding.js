@@ -38,7 +38,7 @@ const onboardingFlow = async (user, message, sendMessage, sendImageUrl) => {
 
   await sendImageUrl(
     phone,
-    'https://res.cloudinary.com/dmldf1kno/image/upload/f_auto,q_auto/pocketassist_onboarding_card_v2_-_Copy_wwdwyg',
+    'https://res.cloudinary.com/dmldf1kno/image/upload/v1782468657/file_000000006e2071f4ba790c82ccffd6f3_qzslkz.png',
     `👋 *Welcome to PocketAssist!*
 
 Your AI-powered utility bot — built to save you time.
