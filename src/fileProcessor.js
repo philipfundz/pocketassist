@@ -8,6 +8,10 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
 // Temp directory
 const TEMP_DIR = path.join(__dirname, '../temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -74,25 +78,36 @@ const handleOCR = async (phone, mediaUrl, sendMessage) => {
   }
 };
 
-// ─── VOICE TRANSCRIBER (Groq Whisper) ───────────────────────────────────────
+// ─── VOICE TRANSCRIBER (Gemini 2.5 Flash — native audio input) ──────────────
 const handleVoiceTranscriber = async (phone, mediaUrl, sendMessage) => {
   await sendMessage(phone, '🎙️ Transcribing your voice message...');
   let filePath;
   try {
     filePath = await downloadFile(mediaUrl, 'ogg');
-    const Groq = require('groq-sdk');
-    const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const transcription = await groqClient.audio.transcriptions.create({
-      file: fs.createReadStream(filePath),
-      model: 'whisper-large-v3',
-    });
+    const audioBytes = fs.readFileSync(filePath);
+    const base64Audio = audioBytes.toString('base64');
 
-    if (!transcription.text?.trim()) {
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: base64Audio,
+          mimeType: 'audio/ogg',
+        },
+      },
+      {
+        text: 'Transcribe this voice message exactly as spoken. If it contains Nigerian Pidgin, Igbo, Yoruba, or Hausa words or phrases, transcribe them as spoken rather than translating to English. Return only the transcription text, with no introduction, commentary, or labels.',
+      },
+    ]);
+
+    const transcript = result.response.text()?.trim();
+
+    if (!transcript) {
       return sendMessage(phone, '❌ Could not transcribe. Please send a clearer voice message.');
     }
 
-    return sendMessage(phone, `🎙️ *Transcription:*\n━━━━━━━━━━━━━━\n\n${transcription.text}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
+    return sendMessage(phone, `🎙️ *Transcription:*\n━━━━━━━━━━━━━━\n\n${transcript}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('Voice transcribe error:', err.message);
     return sendMessage(phone, '❌ Transcription failed. Please try again.');
@@ -225,17 +240,12 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
       return sendMessage(phone, '❌ Could not extract content from this page.');
     }
 
-    const Groq = require('groq-sdk');
-    const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
     const PROMPTS = require('./prompts');
 
-    const summary = await groqClient.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: PROMPTS.webpageReader(content) }],
-      max_tokens: 512,
-    });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const summary = await model.generateContent(PROMPTS.webpageReader(content));
 
-    const result = summary.choices[0].message.content;
+    const result = summary.response.text();
     return sendMessage(phone, `🌐 *Webpage Summary:*\n━━━━━━━━━━━━━━\n\n${result}\n\n_Source:_ ${url.trim()}\n\n━━━━━━━━━━━━━━\nType *0* 🔙 to go back`);
   } catch (err) {
     console.error('Web reader error:', err.message);

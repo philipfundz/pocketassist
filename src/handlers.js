@@ -1,4 +1,5 @@
-const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 const { canUseTools } = require('./auth');
 const { incrementDailyCount, getSession, setSession, clearSession } = require('./database');
 const { guardMessage } = require('./premiumGuard');
@@ -25,7 +26,8 @@ const {
   handleStickerCreator,
 } = require('./fileProcessor');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // ─── SESSION HELPERS ──────────────────────────────────────────────────────────
 const resetToSubmenu = async (phone, menu) => {
@@ -39,14 +41,68 @@ const getSubmenuMessage = (menu) => {
   return getMainMenu();
 };
 
-// ─── GROQ AI CALL ─────────────────────────────────────────────────────────────
-const askGroq = async (prompt) => {
-  const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1024,
+// ─── GEMINI TEXT CALL (single-shot, no history) ──────────────────────────────
+const askGemini = async (prompt) => {
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+};
+
+// ─── GEMINI CHAT (with history) — used by AI Q&A and Smart Reply ────────────
+const askGeminiChat = async (history, newMessage) => {
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp. 
+Answer questions clearly and concisely. Remember the conversation context and give 
+follow-up answers that reference what was discussed. Keep responses under 400 words. 
+Use plain text only — no asterisks, no markdown, no bold symbols.`,
   });
-  return response.choices[0].message.content;
+
+  const chat = model.startChat({
+    history: history.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+  });
+
+  const result = await chat.sendMessage(newMessage);
+  return result.response.text();
+};
+
+// ─── GEMINI VISION (image + optional text) ────────────────────────────────────
+// Used by: AI Q&A (with history) and Assignment Writer (single-shot, no history)
+const askGeminiVision = async (imageUrl, question, history = []) => {
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
+Answer questions about images clearly and concisely. Keep responses under 400 words.
+Use plain text only — no asterisks, no markdown, no bold symbols.`,
+  });
+
+  // Download image and convert to base64
+  const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+  const base64 = Buffer.from(response.data).toString('base64');
+  const mimeType = response.headers['content-type'] || 'image/jpeg';
+
+  const parts = [
+    { inlineData: { data: base64, mimeType } },
+    { text: question || 'What is in this image? Describe it in detail.' },
+  ];
+
+  // If there's prior history, include it (AI Q&A use case)
+  if (history.length > 0) {
+    const chat = model.startChat({
+      history: history.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+    });
+    const result = await chat.sendMessage(parts);
+    return result.response.text();
+  }
+
+  const result = await model.generateContent(parts);
+  return result.response.text();
 };
 
 // ─── MAIN ROUTER ──────────────────────────────────────────────────────────────
@@ -86,32 +142,74 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
   // ─── AI TOOLS ─────────────────────────────────────────────────────────────
   if (session.menu === 'ai') {
 
-    // 1 ── AI Q&A (Free)
+    // 1 ── AI Q&A (Free) — with conversation history + image support
     if (text === '1' && !session.step) {
-      await setSession(phone, { menu: 'ai', step: 'aiqa', data: {} });
-      return sendMessage(phone, '🧠 *AI Q&A*\n\nAsk me anything! Type your question:');
+      await setSession(phone, { menu: 'ai', step: 'aiqa', data: { messages: [] } });
+      return sendMessage(phone, '🧠 *AI Q&A*\n\nAsk me anything! Type your question or send an image:\n\n_Type *0* 🔙 to go back_');
     }
     if (session.step === 'aiqa') {
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
+
+      const history = session.data.messages || [];
       await sendMessage(phone, '🤔 Thinking...');
-      const answer = await askGroq(PROMPTS.aiQA(text));
-      await incrementDailyCount(phone);
-      return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nAsk another question or type *0* 🔙 to go back`);
+
+      let answer;
+      let userEntry;
+
+      try {
+        if (mediaUrl && mediaType?.includes('image')) {
+          // Image question
+          answer = await askGeminiVision(mediaUrl, text || 'What is in this image?', history);
+          userEntry = { role: 'user', content: text ? `[Image] ${text}` : '[Image]' };
+        } else {
+          // Text question with history
+          answer = await askGeminiChat(history, text);
+          userEntry = { role: 'user', content: text };
+        }
+
+        // Save history (keep last 10 messages = 5 exchanges)
+        history.push(userEntry);
+        history.push({ role: 'assistant', content: answer });
+        const trimmed = history.slice(-10);
+
+        await setSession(phone, { menu: 'ai', step: 'aiqa', data: { messages: trimmed } });
+        await incrementDailyCount(phone);
+
+        return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nAsk a follow-up, send another image, or type *0* 🔙 to go back`);
+      } catch (err) {
+        console.error('[AI Q&A Error]', err.message);
+        return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+      }
     }
 
-    // 2 ── Smart Reply (Free)
+    // 2 ── Smart Reply (Free) — with conversation history
     if (text === '2' && !session.step) {
-      await setSession(phone, { menu: 'ai', step: 'smartreply', data: {} });
-      return sendMessage(phone, '✍️ *AI Smart Reply*\n\nPaste the message you want to reply to:');
+      await setSession(phone, { menu: 'ai', step: 'smartreply', data: { messages: [] } });
+      return sendMessage(phone, '✍️ *AI Smart Reply*\n\nPaste the message you want to reply to:\n\n_Type *0* 🔙 to go back_');
     }
     if (session.step === 'smartreply') {
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
+
+      const history = session.data.messages || [];
       await sendMessage(phone, '✍️ Generating replies...');
-      const replies = await askGroq(PROMPTS.smartReply(text));
-      await incrementDailyCount(phone);
-      return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
+
+      try {
+        const replies = await askGeminiChat(history, PROMPTS.smartReply(text));
+
+        history.push({ role: 'user', content: text });
+        history.push({ role: 'assistant', content: replies });
+        const trimmed = history.slice(-10);
+
+        await setSession(phone, { menu: 'ai', step: 'smartreply', data: { messages: trimmed } });
+        await incrementDailyCount(phone);
+
+        return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
+      } catch (err) {
+        console.error('[Smart Reply Error]', err.message);
+        return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+      }
     }
 
     // 3 ── Translator (Premium)
@@ -129,7 +227,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await sendMessage(phone, '🌍 Translating...');
-      const translated = await askGroq(PROMPTS.translator(session.data.text, text));
+      const translated = await askGemini(PROMPTS.translator(session.data.text, text));
       await incrementDailyCount(phone);
       await setSession(phone, { menu: 'ai', step: 'translate_text', data: {} });
       return sendMessage(phone, `🌍 *Translation (${text}):*\n\n${translated}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType another text to translate or *0* 🔙 to go back`);
@@ -150,7 +248,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await sendMessage(phone, '✨ Generating captions...');
-      const captions = await askGroq(PROMPTS.captionGen(session.data.description, text));
+      const captions = await askGemini(PROMPTS.captionGen(session.data.description, text));
       await incrementDailyCount(phone);
       await setSession(phone, { menu: 'ai', step: 'caption_desc', data: {} });
       return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nDescribe another post or type *0* 🔙 to go back`);
@@ -169,7 +267,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await sendMessage(phone, '🔄 Rewriting your text...\n\n_This may take a few seconds ⏳_');
       try {
         const rewritten = await Promise.race([
-          askGroq(PROMPTS.plagiarismRewriter(text)),
+          askGemini(PROMPTS.plagiarismRewriter(text)),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000))
         ]);
         await incrementDailyCount(phone);
@@ -466,13 +564,13 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await sendMessage(phone, '📋 Building your CV...\n\n_This may take a moment ⏳_');
-      const cv = await askGroq(PROMPTS.cvBuilder(text));
+      const cv = await askGemini(PROMPTS.cvBuilder(text));
       await incrementDailyCount(phone);
       await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *2* to build another or *0* 🔙 to go back`);
     }
 
-    // 3 ── Assignment Writer (Premium)
+    // 3 ── Assignment Writer (Premium) — now supports a photo of the question
     if (text === '3' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
@@ -481,14 +579,27 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     }
     if (session.step === 'assign_topic') {
       await setSession(phone, { menu: 'student', step: 'assign_details', data: { topic: text } });
-      return sendMessage(phone, `📝 Topic: *${text}*\n\nAny specific instructions or details?\n(or type *SKIP* to continue)`);
+      return sendMessage(phone, `📝 Topic: *${text}*\n\nSend specific instructions, or a photo of the assignment question.\n(or type *SKIP* to continue)`);
     }
     if (session.step === 'assign_details') {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      const details = upper === 'SKIP' ? 'No additional details' : text;
       await sendMessage(phone, '📝 Writing your assignment...\n\n_This may take a moment ⏳_');
-      const assignment = await askGroq(PROMPTS.assignmentWriter(session.data.topic, details));
+
+      let assignment;
+      try {
+        if (mediaUrl && mediaType?.includes('image')) {
+          const prompt = PROMPTS.assignmentWriter(session.data.topic, text || 'Use the details shown in the image');
+          assignment = await askGeminiVision(mediaUrl, prompt);
+        } else {
+          const details = upper === 'SKIP' ? 'No additional details' : text;
+          assignment = await askGemini(PROMPTS.assignmentWriter(session.data.topic, details));
+        }
+      } catch (err) {
+        console.error('[Assignment Writer Error]', err.message);
+        return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+      }
+
       await incrementDailyCount(phone);
       await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Assignment: ${session.data.topic}*\n━━━━━━━━━━━━━━\n\n${assignment}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *3* to write another or *0* 🔙 to go back`);
@@ -509,7 +620,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await sendMessage(phone, '📚 Solving your question...\n\n_This may take a moment ⏳_');
-      const solution = await askGroq(PROMPTS.pastQSolver(text, session.data.course));
+      const solution = await askGemini(PROMPTS.pastQSolver(text, session.data.course));
       await incrementDailyCount(phone);
       await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📚 *Solution — ${session.data.course}*\n━━━━━━━━━━━━━━\n\n${solution}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *4* to solve another or *0* 🔙 to go back`);
@@ -528,7 +639,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const parts = text.split('|');
       if (parts.length < 4) return sendMessage(phone, '❌ Wrong format. Use:\n*Name | Position | Company | Skills*');
       await sendMessage(phone, '📨 Writing your cover letter...\n\n_This may take a moment ⏳_');
-      const letter = await askGroq(PROMPTS.coverLetter(parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
+      const letter = await askGemini(PROMPTS.coverLetter(parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
       await incrementDailyCount(phone);
       await resetToSubmenu(phone, 'student');
       return sendMessage(phone, `📄 *Cover Letter*\n━━━━━━━━━━━━━━\n\n${letter}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *5* to write another or *0* 🔙 to go back`);
