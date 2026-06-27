@@ -256,6 +256,30 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 // ─── SOCIAL DOWNLOADER (yt-dlp + ffmpeg compress, fully optimised) ──────────
 const activeDownloads = new Set();
 
+const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filename) => {
+  const response = await axios.get(`${DOWNLOADER_URL}/file/${filename}`, {
+    headers: { 'x-auth-token': DOWNLOADER_TOKEN },
+    responseType: 'stream',
+    timeout: 120000,
+    validateStatus: () => true,
+  });
+
+  if (response.status !== 200) {
+    throw new Error('Could not fetch video part');
+  }
+
+  const partPath = path.join(TEMP_DIR, `${uuidv4()}_part.mp4`);
+  const writer = fs.createWriteStream(partPath);
+  await new Promise((resolve, reject) => {
+    response.data.pipe(writer);
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+    response.data.on('error', reject);
+  });
+
+  return partPath;
+};
+
 const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   if (activeDownloads.has(phone)) {
     return sendMessage(phone, '⏳ You already have a download in progress.\n\nPlease wait for it to finish before starting another.');
@@ -276,6 +300,8 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       validateStatus: () => true,
     });
 
+    const contentType = response.headers['content-type'] || '';
+
     if (response.status !== 200) {
       const chunks = [];
       for await (const chunk of response.data) chunks.push(chunk);
@@ -285,6 +311,41 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       throw new Error(errMsg);
     }
 
+    // ── Case 1: JSON response — video was split into parts ──────────────
+    if (contentType.includes('application/json')) {
+      const chunks = [];
+      for await (const chunk of response.data) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+
+      if (!body.split || !Array.isArray(body.files) || body.files.length === 0) {
+        throw new Error('Download failed — no parts received');
+      }
+
+      await sendMessage(phone, `📦 Video is large — sending in ${body.files.length} parts...`);
+
+      for (let i = 0; i < body.files.length; i++) {
+        let partPath;
+        try {
+          partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, body.files[i]);
+          const label = body.files.length > 1 ? `Part ${i + 1}/${body.files.length}` : '';
+          const caption = i === 0
+            ? `${body.caption || '🎬 Video downloaded via PocketAssist'}${label ? `\n\n${label}` : ''}`
+            : label;
+          await sendVideo(phone, partPath, caption);
+        } finally {
+          cleanup(partPath);
+        }
+
+        // Small delay between parts so WhatsApp doesn't rate-limit rapid uploads
+        if (i < body.files.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
+    }
+
+    // ── Case 2: single video file (original behaviour) ──────────────────
     tempPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}.mp4`);
     const writer = fs.createWriteStream(tempPath);
     await new Promise((resolve, reject) => {
@@ -303,8 +364,6 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   } catch (err) {
     console.error('Social DL error:', err.message);
 
-    // Downloader now returns specific, user-facing error text — pass it through
-    // instead of overriding with a generic message, except for known special cases.
     let msg;
     if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
       msg = '⏱️ Download took too long and timed out.\n\nTry a shorter clip.\n\nType *0* 🔙 to go back.';
