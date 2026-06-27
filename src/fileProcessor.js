@@ -296,7 +296,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     const response = await axios.post(`${DOWNLOADER_URL}/download`, { url: url.trim() }, {
       headers: { 'x-auth-token': DOWNLOADER_TOKEN },
       responseType: 'stream',
-      timeout: 180000,
+      timeout: 600000,
       validateStatus: () => true,
     });
 
