@@ -260,7 +260,7 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filename) => {
   const response = await axios.get(`${DOWNLOADER_URL}/file/${filename}`, {
     headers: { 'x-auth-token': DOWNLOADER_TOKEN },
     responseType: 'stream',
-    timeout: 120000,
+    timeout: 600000,
     validateStatus: () => true,
   });
 
