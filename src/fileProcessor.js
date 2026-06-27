@@ -787,6 +787,7 @@ const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, s
       await sendImage(phone, outputPath, '🎨 Your sticker (WebP format)');
       return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another image.');
     }
+    
   } catch (err) {
     console.error('Sticker error:', err.message);
     return sendMessage(phone, '❌ Sticker creation failed. Please send a clear image and try again.\n\nType *0* 🔙 to go back.');
@@ -795,6 +796,27 @@ const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, s
     cleanup(outputPath);
   }
 };
+
+// Periodic safety sweep — removes orphaned temp files from crashed/incomplete requests
+const SWEEP_INTERVAL_MS = 30 * 60 * 1000; // every 30 min
+const MAX_FILE_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+setInterval(() => {
+  try {
+    const now = Date.now();
+    const files = fs.readdirSync(TEMP_DIR);
+    for (const file of files) {
+      const filePath = path.join(TEMP_DIR, file);
+      const stats = fs.statSync(filePath);
+      if (now - stats.mtimeMs > MAX_FILE_AGE_MS) {
+        fs.unlinkSync(filePath);
+        console.log('Swept stale temp file:', file);
+      }
+    }
+  } catch (e) {
+    console.error('Sweep error:', e.message);
+  }
+}, SWEEP_INTERVAL_MS);
 
 module.exports = {
   handleOCR,
