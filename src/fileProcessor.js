@@ -361,9 +361,12 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     await sendVideo(phone, tempPath, caption);
     return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
 
-  } catch (err) {
+} catch (err) {
     console.error('Social DL error:', err.message);
-
+    if (err.response) {
+      console.error('Social DL error response:', JSON.stringify(err.response.data));
+    }
+    
     let msg;
     if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
       msg = '⏱️ Download took too long and timed out.\n\nTry a shorter clip.\n\nType *0* 🔙 to go back.';
