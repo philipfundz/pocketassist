@@ -41,32 +41,48 @@ const getSubmenuMessage = (menu) => {
   return getMainMenu();
 };
 
-// ─── GEMINI TEXT CALL (single-shot, no history) ──────────────────────────────
+// ─── NIM TEXT CALL (single-shot, no history) ────────────────────────────────
+const NIM_MODEL = 'mistralai/mistral-medium-3-128b';
+const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
 const askGemini = async (prompt) => {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  const response = await axios.post(NIM_URL, {
+    model: NIM_MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 1024,
+    temperature: 0.7,
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data.choices[0].message.content;
 };
 
-// ─── GEMINI CHAT (with history) — used by AI Q&A and Smart Reply ────────────
+// ─── NIM CHAT (with history) ─ used by AI Q&A and Smart Reply ───────────────
 const askGeminiChat = async (history, newMessage) => {
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp. 
-Answer questions clearly and concisely. Remember the conversation context and give 
-follow-up answers that reference what was discussed. Keep responses under 400 words. 
-Use plain text only — no asterisks, no markdown, no bold symbols.`,
-  });
+  const messages = [
+    {
+      role: 'system',
+      content: `You are PocketAssist, a helpful AI assistant on WhatsApp. Answer questions clearly and concisely. Remember the conversation context and give follow-up answers that reference what was discussed. Keep responses under 400 words. Use plain text only - no asterisks, no markdown, no bold symbols.`
+    },
+    ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+    { role: 'user', content: newMessage },
+  ];
 
-  const chat = model.startChat({
-    history: history.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
+  const response = await axios.post(NIM_URL, {
+    model: NIM_MODEL,
+    messages,
+    max_tokens: 1024,
+    temperature: 0.7,
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
   });
-
-  const result = await chat.sendMessage(newMessage);
-  return result.response.text();
+  return response.data.choices[0].message.content;
 };
 
 // ─── GEMINI VISION (image + optional text) ────────────────────────────────────
