@@ -94,9 +94,14 @@ no markdown, no bold symbols.`,
   const base64 = Buffer.from(response.data).toString('base64');
   const mimeType = response.headers['content-type'] || 'image/jpeg';
 
+  const userQuestion = question || 'What is in this image? Describe it in detail.';
+  const wrappedQuestion = question
+    ? `${userQuestion}\n\n(Respond directly with what was asked. Do not describe, restate, or summarize the image content first — go straight into fulfilling the request.)`
+    : userQuestion;
+
   const parts = [
     { inlineData: { data: base64, mimeType } },
-    { text: question || 'What is in this image? Describe it in detail.' },
+    { text: wrappedQuestion },
   ];
 
   // If there's prior history, include it (AI Q&A use case)
