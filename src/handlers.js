@@ -49,13 +49,16 @@ const askGemini = async (prompt) => {
 };
 
 // ─── GEMINI CHAT (with history) — used by AI Q&A and Smart Reply ────────────
-const askGeminiChat = async (history, newMessage) => {
+const askGeminiVision = async (imageUrl, question, history = []) => {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp. 
-Answer questions clearly and concisely. Remember the conversation context and give 
-follow-up answers that reference what was discussed. Keep responses under 400 words. 
-Use plain text only — no asterisks, no markdown, no bold symbols.`,
+    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
+Directly answer the specific question asked about the image. If it's a calculation,
+math problem, or equation, solve it and state the final answer clearly. If it's a
+question with a specific answer (a date, a name, a count, etc.), give that answer
+directly. Only describe the image in general terms if the user explicitly asks you
+to describe it, or asks an open-ended question like "what is this?". Keep responses
+under 400 words. Use plain text only — no asterisks, no markdown, no bold symbols.`,
   });
 
   const chat = model.startChat({
@@ -180,6 +183,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         await incrementDailyCount(phone);
 
         return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nAsk a follow-up, send another image, or type *0* 🔙 to go back`);
+      
       } catch (err) {
         console.error('[AI Q&A Error]', err.message);
         return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
@@ -210,7 +214,10 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
         return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
       } catch (err) {
-        console.error('[Smart Reply Error]', err.message);
+        console.error('[AI Q&A Error]', err.message);
+        if (err.message && err.message.includes('429')) {
+          return sendMessage(phone, '⏳ AI is getting a lot of requests right now and has hit its daily limit.\n\nPlease try again in a few minutes.\n\nType *0* 🔙 to go back.');
+        }
         return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
       }
     }
