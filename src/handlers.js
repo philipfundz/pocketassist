@@ -49,16 +49,13 @@ const askGemini = async (prompt) => {
 };
 
 // ─── GEMINI CHAT (with history) — used by AI Q&A and Smart Reply ────────────
-const askGeminiVision = async (imageUrl, question, history = []) => {
+const askGeminiChat = async (history, newMessage) => {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
-Directly answer the specific question asked about the image. If it's a calculation,
-math problem, or equation, solve it and state the final answer clearly. If it's a
-question with a specific answer (a date, a name, a count, etc.), give that answer
-directly. Only describe the image in general terms if the user explicitly asks you
-to describe it, or asks an open-ended question like "what is this?". Keep responses
-under 400 words. Use plain text only — no asterisks, no markdown, no bold symbols.`,
+    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp. 
+Answer questions clearly and concisely. Remember the conversation context and give 
+follow-up answers that reference what was discussed. Keep responses under 400 words. 
+Use plain text only — no asterisks, no markdown, no bold symbols.`,
   });
 
   const chat = model.startChat({
@@ -78,11 +75,15 @@ const askGeminiVision = async (imageUrl, question, history = []) => {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
-Answer questions about images clearly and concisely. Keep responses under 400 words.
-Use plain text only — no asterisks, no markdown, no bold symbols.`,
+Directly answer the specific question asked about the image. If it's a calculation,
+math problem, or equation, solve it and state the final answer clearly. If it's a
+question with a specific answer (a date, a name, a count, etc.), give that answer
+directly. Only describe the image in general terms if the user explicitly asks you
+to describe it, or asks an open-ended question like "what is this?". Keep responses
+under 400 words. Use plain text only — no asterisks, no markdown, no bold symbols.`,
   });
 
-// Download image and convert to base64
+  // Download image and convert to base64
   const response = await axios.get(imageUrl, {
     responseType: 'arraybuffer',
     headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` }
