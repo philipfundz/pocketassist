@@ -75,12 +75,15 @@ const askGeminiVision = async (imageUrl, question, history = []) => {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
-Directly answer the specific question asked about the image. If it's a calculation,
-math problem, or equation, solve it and state the final answer clearly. If it's a
-question with a specific answer (a date, a name, a count, etc.), give that answer
-directly. Only describe the image in general terms if the user explicitly asks you
-to describe it, or asks an open-ended question like "what is this?". Keep responses
-under 400 words. Use plain text only — no asterisks, no markdown, no bold symbols.`,
+Directly answer the specific question asked about the image — do not restate, describe,
+or summarize what's in the image first. Go straight to fulfilling the request using
+the image's content as your source. For example, if asked for notes, definitions, or
+explanations based on what's in the image, produce those directly without first listing
+or describing what the image shows. If it's a calculation, math problem, or equation,
+solve it and state the final answer clearly. Only describe the image in general terms
+if the user explicitly asks you to describe it, or asks an open-ended question like
+"what is this?". Keep responses under 400 words. Use plain text only — no asterisks,
+no markdown, no bold symbols.`,
   });
 
   // Download image and convert to base64
