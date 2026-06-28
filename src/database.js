@@ -138,35 +138,23 @@ const setOnboarded = async (phone) => {
   if (error) throw error;
 };
 
+// Session is per-phone, not per-account — two phones on the same account
+// (linked for subscription) must NOT share live menu/step/data state.
 const getSession = async (phone) => {
   const { data: link } = await supabase
     .from('linked_phones')
-    .select('account_id')
+    .select('session')
     .eq('phone', phone)
     .single();
-  if (!link) return { menu: 'main', step: null, data: {} };
 
-  const { data: account } = await supabase
-    .from('accounts')
-    .select('session')
-    .eq('id', link.account_id)
-    .single();
-
-  return account?.session || { menu: 'main', step: null, data: {} };
+  return link?.session || { menu: 'main', step: null, data: {} };
 };
 
 const setSession = async (phone, session) => {
-  const { data: link } = await supabase
-    .from('linked_phones')
-    .select('account_id')
-    .eq('phone', phone)
-    .single();
-  if (!link) return;
-
   await supabase
-    .from('accounts')
+    .from('linked_phones')
     .update({ session })
-    .eq('id', link.account_id);
+    .eq('phone', phone);
 };
 
 const clearSession = async (phone) => {
