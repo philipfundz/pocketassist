@@ -79,8 +79,11 @@ Answer questions about images clearly and concisely. Keep responses under 400 wo
 Use plain text only — no asterisks, no markdown, no bold symbols.`,
   });
 
-  // Download image and convert to base64
-  const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+// Download image and convert to base64
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` }
+  });
   const base64 = Buffer.from(response.data).toString('base64');
   const mimeType = response.headers['content-type'] || 'image/jpeg';
 
