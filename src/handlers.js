@@ -87,12 +87,10 @@ const askGeminiChat = async (history, newMessage) => {
   return response.data.choices[0].message.content;
 };
 
-// ─── GEMINI VISION (image + optional text) ────────────────────────────────────
+// ─── NIM VISION (image + optional text) ─────────────────────────────────────
 // Used by: AI Q&A (with history) and Assignment Writer (single-shot, no history)
 const askGeminiVision = async (imageUrl, question, history = []) => {
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: `You are PocketAssist, a helpful AI assistant on WhatsApp.
+  const systemPrompt = `You are PocketAssist, a helpful AI assistant on WhatsApp.
 Directly answer the specific question asked about the image — do not restate, describe,
 or summarize what's in the image first. Go straight to fulfilling the request using
 the image's content as your source. For example, if asked for notes, definitions, or
@@ -101,41 +99,47 @@ or describing what the image shows. If it's a calculation, math problem, or equa
 solve it and state the final answer clearly. Only describe the image in general terms
 if the user explicitly asks you to describe it, or asks an open-ended question like
 "what is this?". Keep responses under 400 words. Use plain text only — no asterisks,
-no markdown, no bold symbols.`,
-  });
+no markdown, no bold symbols.`;
 
   // Download image and convert to base64
-  const response = await axios.get(imageUrl, {
+  const imgResponse = await axios.get(imageUrl, {
     responseType: 'arraybuffer',
     headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` }
   });
-  const base64 = Buffer.from(response.data).toString('base64');
-  const mimeType = response.headers['content-type'] || 'image/jpeg';
+  const base64 = Buffer.from(imgResponse.data).toString('base64');
+  const mimeType = imgResponse.headers['content-type'] || 'image/jpeg';
 
   const userQuestion = question || 'What is in this image? Describe it in detail.';
   const wrappedQuestion = question
     ? `${userQuestion}\n\n(Respond directly with what was asked. Do not describe, restate, or summarize the image content first — go straight into fulfilling the request.)`
     : userQuestion;
 
-  const parts = [
-    { inlineData: { data: base64, mimeType } },
-    { text: wrappedQuestion },
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+    {
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+        { type: 'text', text: wrappedQuestion },
+      ],
+    },
   ];
 
-  // If there's prior history, include it (AI Q&A use case)
-  if (history.length > 0) {
-    const chat = model.startChat({
-      history: history.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      })),
-    });
-    const result = await chat.sendMessage(parts);
-    return result.response.text();
-  }
+  const response = await axios.post(NIM_URL, {
+    model: NIM_MODEL,
+    reasoning_effort: 'none',
+    messages,
+    max_tokens: 1024,
+    temperature: 0.7,
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
-  const result = await model.generateContent(parts);
-  return result.response.text();
+  return response.data.choices[0].message.content;
 };
 
 // ─── MAIN ROUTER ──────────────────────────────────────────────────────────────
