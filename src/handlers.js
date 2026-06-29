@@ -213,7 +213,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       
       } catch (err) {
         console.error('[AI Q&A Error]', err.message);
-        return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+        console.error('[AI Q&A Detail]', JSON.stringify(err.response?.data));
+        return sendMessage(phone, '❌ Something went wrong.
       }
     }
 
