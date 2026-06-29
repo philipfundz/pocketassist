@@ -42,12 +42,13 @@ const getSubmenuMessage = (menu) => {
 };
 
 // ─── NIM TEXT CALL (single-shot, no history) ────────────────────────────────
-const NIM_MODEL = 'mistralai/mistral-medium-3.5';
+const NIM_MODEL = 'mistralai/mistral-medium-3.5-128b';
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const askGemini = async (prompt) => {
   const response = await axios.post(NIM_URL, {
     model: NIM_MODEL,
+    reasoning_effort: 'normal',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 1024,
     temperature: 0.7,
@@ -73,6 +74,7 @@ const askGeminiChat = async (history, newMessage) => {
 
   const response = await axios.post(NIM_URL, {
     model: NIM_MODEL,
+    reasoning_effort: 'normal',
     messages,
     max_tokens: 1024,
     temperature: 0.7,
