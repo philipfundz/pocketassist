@@ -27,7 +27,7 @@ const {
 } = require('./fileProcessor');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const GEMINI_MODEL = 'gemini-2.5-flash';
+
 
 // ─── SESSION HELPERS ──────────────────────────────────────────────────────────
 const resetToSubmenu = async (phone, menu) => {
@@ -526,7 +526,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await setSession(phone, { menu: 'file', step: 'socialdl', data: {} });
-      return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 5 min / 15MB)_');
+      return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 10 min • Auto-compressed & split if large)_');
     }
     if (session.step === 'socialdl') {
       await handleSocialDL(phone, text, sendMessage, sendVideo);
