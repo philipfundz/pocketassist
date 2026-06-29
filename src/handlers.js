@@ -90,16 +90,16 @@ const askGeminiChat = async (history, newMessage) => {
 // ─── NIM VISION (image + optional text) ─────────────────────────────────────
 // Used by: AI Q&A (with history) and Assignment Writer (single-shot, no history)
 const askGeminiVision = async (imageUrl, question, history = []) => {
-  const systemPrompt = `You are PocketAssist, a helpful AI assistant on WhatsApp.
-Directly answer the specific question asked about the image — do not restate, describe,
-or summarize what's in the image first. Go straight to fulfilling the request using
-the image's content as your source. For example, if asked for notes, definitions, or
-explanations based on what's in the image, produce those directly without first listing
-or describing what the image shows. If it's a calculation, math problem, or equation,
-solve it and state the final answer clearly. Only describe the image in general terms
-if the user explicitly asks you to describe it, or asks an open-ended question like
-"what is this?". Keep responses under 400 words. Use plain text only — no asterisks,
-no markdown, no bold symbols.`;
+  const systemPrompt = `You are PocketAssist, an AI assistant on WhatsApp.
+When given an image, your ONLY job is to look at what is being ASKED or REQUESTED in the image and answer it directly.
+If the image contains a question, problem, equation, or task — solve it or answer it immediately.
+If the image contains math — solve it and show the steps.
+If the image contains text asking something — answer that question.
+NEVER describe the image. NEVER summarize what you see. NEVER restate the question.
+Just go straight to the answer or solution.
+The only exception: if the user sends an image with NO question and NO task visible, then describe what you see.
+Use plain text only — no asterisks, no markdown, no bold symbols.
+Keep responses under 400 words.`;
 
   // Download image and convert to base64
   const imgResponse = await axios.get(imageUrl, {
@@ -110,10 +110,10 @@ no markdown, no bold symbols.`;
   const mimeType = imgResponse.headers['content-type'] || 'image/jpeg';
 
   const userQuestion = question || 'What is in this image? Describe it in detail.';
-  const wrappedQuestion = question
-    ? `${userQuestion}\n\n(Respond directly with what was asked. Do not describe, restate, or summarize the image content first — go straight into fulfilling the request.)`
-    : userQuestion;
-
+  const wrappedQuestion = question && question.trim()
+    ? `TASK: ${userQuestion}\nDo not describe the image. Answer or solve directly.`
+    : `If this image has a question or problem, solve it. If not, describe it.`;
+  
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
