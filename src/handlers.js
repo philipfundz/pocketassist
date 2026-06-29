@@ -296,29 +296,25 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nDescribe another post or type *0* 🔙 to go back`);
     }
 
-    // 5 ── Plagiarism Rewriter (Premium)
-    if (text === '5' && !session.step) {
+    // 6 ── AI Image Generator (Premium)
+    if (text === '6' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
-      return sendMessage(phone, '🔄 *Plagiarism Rewriter*\n\nPaste the text you want rewritten:\n_(Tip: one paragraph at a time works best)_');
+      await setSession(phone, { menu: 'ai', step: 'imagegen', data: {} });
+      return sendMessage(phone, '🎨 *AI Image Generator*\n\nDescribe the image you want to generate:\n_(e.g. "a lion wearing a suit in a city at night")_\n\n_Type *0* 🔙 to go back_');
     }
-    if (session.step === 'rewrite') {
+    if (session.step === 'imagegen') {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      await sendMessage(phone, '🔄 Rewriting your text...\n\n_This may take a few seconds ⏳_');
+      await sendMessage(phone, '🎨 Generating your image... ⏳\n\n_This may take 10–20 seconds_');
       try {
-        const rewritten = await Promise.race([
-          askGemini(PROMPTS.plagiarismRewriter(text)),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000))
-        ]);
+        const encodedPrompt = encodeURIComponent(text);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true`;
         await incrementDailyCount(phone);
-        return sendMessage(phone, `✅ *Rewritten:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another passage or type *0* 🔙 to go back`);
+        await sendImage(phone, imageUrl, `🎨 *Here's your image!*\n\n_Prompt: ${text.substring(0, 100)}_\n\n━━━━━━━━━━━━━━\nDescribe another image or type *0* 🔙 to go back`);
       } catch (err) {
-        if (err.message === 'timeout') {
-          return sendMessage(phone, '⏱️ This is taking longer than expected.\n\nTry sending a *shorter passage* (one paragraph at a time).\n\nPaste a shorter text or type *0* 🔙 to go back.');
-        }
-        return sendMessage(phone, '❌ Rewrite failed. Please try again.\n\nType *0* 🔙 to go back.');
+        console.error('[ImageGen Error]', err.message);
+        return sendMessage(phone, '❌ Image generation failed. Please try again.\n\nType *0* 🔙 to go back.');
       }
     }
   }

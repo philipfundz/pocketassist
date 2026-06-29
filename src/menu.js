@@ -15,6 +15,7 @@ const getAIToolsMenu = () => `🧠 *AI Tools*
 *3.* Translate text 💎
 *4.* Caption Generator 💎
 *5.* Plagiarism Rewriter 💎
+*6.* AI Image Generator 💎
 ━━━━━━━━━━━━━━
 💎 Premium only
 *0.* 🔙 Back to Main Menu`;
@@ -43,6 +44,7 @@ const getStudentToolsMenu = () => `🎓 *Student Tools*
 *3.* Assignment Writer 💎
 *4.* Past Question Solver 💎
 *5.* Cover Letter 💎
+*6.* AI Image Generator 💎
 ━━━━━━━━━━━━━━
 💎 Premium only
 *0.* 🔙 Back to Main Menu`;
