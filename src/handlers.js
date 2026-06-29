@@ -42,7 +42,7 @@ const getSubmenuMessage = (menu) => {
 };
 
 // ─── NIM TEXT CALL (single-shot, no history) ────────────────────────────────
-const NIM_MODEL = 'mistralai/mistral-medium-3-128b';
+const NIM_MODEL = 'mistralai/mistral-medium-3.5';
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const askGemini = async (prompt) => {
