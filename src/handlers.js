@@ -48,7 +48,7 @@ const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const askGemini = async (prompt) => {
   const response = await axios.post(NIM_URL, {
     model: NIM_MODEL,
-    reasoning_effort: 'normal',
+    reasoning_effort: 'medium',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 1024,
     temperature: 0.7,
@@ -74,7 +74,7 @@ const askGeminiChat = async (history, newMessage) => {
 
   const response = await axios.post(NIM_URL, {
     model: NIM_MODEL,
-    reasoning_effort: 'normal',
+    reasoning_effort: 'medium',
     messages,
     max_tokens: 1024,
     temperature: 0.7,
