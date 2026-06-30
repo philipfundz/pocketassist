@@ -691,6 +691,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
   }
 
   // ─── FALLBACK ──────────────────────────────────────────────────────────────
+if (session.step === 'imagegen') return;
   return sendMessage(phone, `🤖 I didn't understand that.\n\nType *MENU* to see all options or *HELP* for guidance.`);
 };
 
