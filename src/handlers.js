@@ -4,6 +4,8 @@ const { canUseTools } = require('./auth');
 const { incrementDailyCount, getSession, setSession, clearSession } = require('./database');
 const { guardMessage } = require('./premiumGuard');
 const PROMPTS = require('./prompts');
+const fs = require('fs');
+const path = require('path');
 const {
   getMainMenu,
   getAIToolsMenu,
@@ -311,9 +313,11 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         const encodedPrompt = encodeURIComponent(text);
         const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true`;
         const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        const imageBuffer = Buffer.from(imageResponse.data);
+        const tempPath = path.join('/tmp', `imagegen_${Date.now()}.jpg`);
+        fs.writeFileSync(tempPath, Buffer.from(imageResponse.data));
         await incrementDailyCount(phone);
-        await sendImage(phone, imageBuffer, `🎨 *Here's your image!*\n\n_Prompt: ${text.substring(0, 100)}_\n\n━━━━━━━━━━━━━━\nDescribe another image or type *0* 🔙 to go back`);
+        await sendImage(phone, tempPath, `🎨 *Here's your image!*\n\n_Prompt: ${text.substring(0, 100)}_\n\n━━━━━━━━━━━━━━\nDescribe another image or type *0* 🔙 to go back`);
+        fs.unlinkSync(tempPath);
       } catch (err) {
         console.error('[ImageGen Error]', err.message);
         return sendMessage(phone, '❌ Image generation failed. Please try again.\n\nType *0* 🔙 to go back.');
