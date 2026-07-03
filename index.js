@@ -218,23 +218,23 @@ app.post('/webhook', async (req, res) => {
     const msgType = msg.type;
 
     let text = '';
-    let mediaUrl = null;
+    let mediaId = null;
     let mediaType = null;
 
     if (msgType === 'text') {
       text = msg.text?.body || '';
     } else if (msgType === 'image') {
       mediaType = 'image';
-      mediaUrl = await getMediaUrl(msg.image.id);
+      mediaId = msg.image.id;
     } else if (msgType === 'audio') {
       mediaType = 'audio';
-      mediaUrl = await getMediaUrl(msg.audio.id);
+      mediaId = msg.audio.id;
     } else if (msgType === 'document') {
       mediaType = msg.document.mime_type || 'document';
-      mediaUrl = await getMediaUrl(msg.document.id);
+      mediaId = msg.document.id;
     } else if (msgType === 'video') {
       mediaType = 'video';
-      mediaUrl = await getMediaUrl(msg.video.id);
+      mediaId = msg.video.id;
     } else {
       return;
     }
@@ -244,20 +244,34 @@ app.post('/webhook', async (req, res) => {
       if (handled) return;
     }
 
-    let user = await getOrCreateUser(phone);
-    user = await checkAndResetDaily(user);
-    const access = await checkAccess(phone);
+    // ── Parallel DB calls ──────────────────────────────────────────────────
+    const user = await getOrCreateUser(phone);
 
-    const isNewUser = await onboardingFlow(user, text, sendMessage, sendImageUrl);
+    const [resetUser, access, currentStep] = await Promise.all([
+      checkAndResetDaily(user),
+      checkAccess(phone),
+      getSessionStep(phone),
+    ]);
+
+    const updatedUser = resetUser;
+    // ──────────────────────────────────────────────────────────────────────
+
+    const isNewUser = await onboardingFlow(updatedUser, text, sendMessage, sendImageUrl);
     if (isNewUser) return;
+
+    // ── Lazy media URL fetch (only when needed) ────────────────────────────
+    let mediaUrl = null;
+    if (mediaId) {
+      mediaUrl = await getMediaUrl(mediaId);
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     const job = () => handleMessage(
       phone, text, mediaUrl, mediaType,
       sendMessage, sendImage, sendVideo,
-      sendDocument, sendSticker, user, access
+      sendDocument, sendSticker, updatedUser, access
     );
 
-     const currentStep = await getSessionStep(phone);
     if (isHeavyStep(currentStep) && activeJobs >= MAX_CONCURRENT) {
       const position = jobQueue.length + 1;
       enqueueJob(phone, job, sendMessage, position);
