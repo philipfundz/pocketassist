@@ -399,9 +399,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
-      await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another file or type *0* 🔙 to go back');
+      return handleFileConvert(phone, session.data.mediaUrl, session.data.mediaType, text.toLowerCase(), sendMessage, sendDocument, sendImage);
     }
 
     // 3 ── Voice Transcriber (Free)
@@ -416,8 +414,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleVoiceTranscriber(phone, mediaUrl, sendMessage);
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another voice message or type *0* 🔙 to go back');
+      return handleVoiceTranscriber(phone, mediaUrl, sendMessage);
     }
 
     // 4 ── URL Shortener (Free)
@@ -429,8 +426,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleURLShortener(phone, text, sendMessage);
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another link or type *0* 🔙 to go back');
+      return handleURLShortener(phone, text, sendMessage);
     }
 
     // 5 ── QR Code (Free)
@@ -455,8 +451,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       const { allowed, access: acc } = await canUseTools(phone, false);
       if (!allowed) return sendMessage(phone, guardMessage(acc, false));
       await incrementDailyCount(phone);
-      await handleWebpageReader(phone, text, sendMessage);
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another URL or type *0* 🔙 to go back');
+      return handleWebpageReader(phone, text, sendMessage);
     }
 
     // 7 ── Watermark (Premium)
@@ -501,7 +496,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       await incrementDailyCount(phone);
       await handleESign(phone, session.data.pdfUrl, mediaUrl, sendMessage, sendDocument);
       await setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nSend another PDF to sign or type *0* 🔙 to go back');
+      return;
     }
 
     // 9 ── Sticker Creator (Premium)
@@ -531,8 +526,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 10 min • Auto-compressed & split if large)_');
     }
     if (session.step === 'socialdl') {
-      await handleSocialDL(phone, text, sendMessage, sendVideo);
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nPaste another link or type *0* 🔙 to go back');
+      return handleSocialDL(phone, text, sendMessage, sendVideo);
     }
 
     // 11 ── WhatsApp Link Generator (Free)
