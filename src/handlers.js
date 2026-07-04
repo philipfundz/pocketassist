@@ -298,6 +298,28 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
       return sendMessage(phone, `📱 *Captions for ${text}:*\n\n${captions}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nDescribe another post or type *0* 🔙 to go back`);
     }
 
+    // 5 ── Plagiarism Rewriter (Premium)
+if (text === '5' && !session.step) {
+  const { allowed, access: acc } = await canUseTools(phone, true);
+  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+  await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
+  return sendMessage(phone, '✏️ *Plagiarism Rewriter*\n\nPaste the text you want rewritten:\n\n_Type *0* 🔙 to go back_');
+}
+if (session.step === 'rewrite') {
+  const { allowed, access: acc } = await canUseTools(phone, true);
+  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+  await sendMessage(phone, '✏️ Rewriting...');
+  try {
+    const rewritten = await askGemini(PROMPTS.plagiarismRewriter(text));
+    await incrementDailyCount(phone);
+    await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
+    return sendMessage(phone, `✏️ *Rewritten Text:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another text or type *0* 🔙 to go back`);
+  } catch (err) {
+    console.error('[Rewriter Error]', err.message);
+    return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+  }
+}
+
     // 6 ── AI Image Generator (Premium)
     if (text === '6' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
@@ -318,6 +340,8 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         await incrementDailyCount(phone);
         await sendImage(phone, tempPath, `🎨 *Here's your image!*\n\n_Prompt: ${text.substring(0, 100)}_\n\n━━━━━━━━━━━━━━\nDescribe another image or type *0* 🔙 to go back`);
         fs.unlinkSync(tempPath);
+        fs.unlinkSync(tempPath);
+        return; // ← add this
       } catch (err) {
         console.error('[ImageGen Error]', err.message);
         return sendMessage(phone, '❌ Image generation failed. Please try again.\n\nType *0* 🔙 to go back.');
