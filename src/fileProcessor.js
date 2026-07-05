@@ -262,8 +262,8 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 
 const activeDownloads = new Set();
 
-const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filename) => {
-  const response = await axios.get(`${DOWNLOADER_URL}/file/${filename}`, {
+const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filePath) => {
+  const response = await axios.get(`${DOWNLOADER_URL}${filePath}`, {
     headers: { 'x-auth-token': DOWNLOADER_TOKEN },
     responseType: 'stream',
     timeout: 600000,
@@ -271,9 +271,8 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filename) => {
   });
 
   if (response.status !== 200) {
-    // Drain the stream so the connection closes cleanly
     response.data.resume();
-    throw new Error(`Could not fetch video part "${filename}" (HTTP ${response.status})`);
+    throw new Error(`Could not fetch video part "${filePath}" (HTTP ${response.status})`);
   }
 
   const partPath = path.join(TEMP_DIR, `${uuidv4()}_part.mp4`);
@@ -286,9 +285,8 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filename) => {
     response.data.on('error', reject);
   });
 
-  // Sanity-check: make sure we actually got bytes
   if (!fs.existsSync(partPath) || fs.statSync(partPath).size === 0) {
-    throw new Error(`Part file "${filename}" was empty after download.`);
+    throw new Error(`Part file "${filePath}" was empty after download.`);
   }
 
   return partPath;
@@ -327,55 +325,44 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
         { url: url.trim() },
         {
           headers: { 'x-auth-token': DOWNLOADER_TOKEN },
-          responseType: 'stream',
           timeout: 600000,
-          validateStatus: () => true, // Never throw on HTTP error codes — we handle them manually
+          validateStatus: () => true,
         }
       );
     } catch (networkErr) {
-      // Axios threw before we got a response (e.g. ECONNREFUSED, timeout)
       if (networkErr.code === 'ECONNABORTED' || networkErr.message.toLowerCase().includes('timeout')) {
         throw new Error('Download timed out — please try a shorter clip.');
       }
       throw new Error('Could not reach the download service. Please try again in a moment.');
     }
 
-    const contentType = response.headers['content-type'] || '';
-
-    // ── Non-200 response: read body to extract error message ─────────────
-    if (response.status !== 200) {
-      const chunks = [];
-      for await (const chunk of response.data) chunks.push(chunk);
-      const bodyText = Buffer.concat(chunks).toString('utf8');
-
-      let errMsg = `Download failed (HTTP ${response.status})`;
-      try {
-        const parsed = JSON.parse(bodyText);
-        if (parsed.error) errMsg = parsed.error;
-      } catch (_) {
-        // Body wasn't JSON — use a slice of the raw text if it looks useful
-        if (bodyText.length > 0 && bodyText.length < 300) errMsg = bodyText;
-      }
-      throw new Error(errMsg);
+    // ── Parse JSON response ───────────────────────────────────────────────
+    let body;
+    try {
+      body = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+    } catch (parseErr) {
+      throw new Error('Received an unexpected response from the download service.');
     }
 
-    // ── JSON response: video was split into parts ─────────────────────────
-    if (contentType.includes('application/json')) {
-      const chunks = [];
-      for await (const chunk of response.data) chunks.push(chunk);
-      const bodyText = Buffer.concat(chunks).toString('utf8');
+    // ── Non-200: surface error message from downloader ────────────────────
+    if (response.status !== 200) {
+      throw new Error(body?.error || `Download failed (HTTP ${response.status})`);
+    }
 
-      let body;
+    // ── Success: single file ──────────────────────────────────────────────
+    if (!body.split && Array.isArray(body.files) && body.files.length === 1) {
+      let partPath = null;
       try {
-        body = JSON.parse(bodyText);
-      } catch (parseErr) {
-        throw new Error('Received an unexpected response from the download service.');
+        partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, body.files[0]);
+        await sendVideo(phone, partPath, '🎬 Video downloaded via PocketAssist');
+      } finally {
+        cleanup(partPath);
       }
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
+    }
 
-      if (!body.split || !Array.isArray(body.files) || body.files.length === 0) {
-        throw new Error('Download failed — no video parts were received.');
-      }
-
+    // ── Success: split files ──────────────────────────────────────────────
+    if (body.split && Array.isArray(body.files) && body.files.length > 0) {
       await sendMessage(
         phone,
         `📦 Video is large — sending in ${body.files.length} part${body.files.length > 1 ? 's' : ''}...`
@@ -385,62 +372,27 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
         let partPath = null;
         try {
           partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, body.files[i]);
-
-          const label = body.files.length > 1 ? `Part ${i + 1}/${body.files.length}` : '';
-          const caption =
-            i === 0
-              ? `${body.caption || '🎬 Video downloaded via PocketAssist'}${label ? `\n\n${label}` : ''}`
-              : label;
-
+          const caption = body.files.length > 1
+            ? `🎬 Part ${i + 1}/${body.files.length}`
+            : '🎬 Video downloaded via PocketAssist';
           await sendVideo(phone, partPath, caption);
         } catch (partErr) {
           console.error(`[SocialDL] Part ${i + 1} failed:`, partErr.message);
-          await sendMessage(
-            phone,
-            `⚠️ Part ${i + 1} could not be sent: ${partErr.message}`
-          );
+          await sendMessage(phone, `⚠️ Part ${i + 1} could not be sent: ${partErr.message}`);
         } finally {
           cleanup(partPath);
         }
 
-        // Small delay between parts to avoid WhatsApp rate limits
         if (i < body.files.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       }
 
-      return sendMessage(
-        phone,
-        '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.'
-      );
+      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
     }
 
-    // ── Binary response: single video file ───────────────────────────────
-    tempPath = path.join(TEMP_DIR, `${uuidv4()}_${phone}.mp4`);
-    const writer = fs.createWriteStream(tempPath);
-
-    await new Promise((resolve, reject) => {
-      response.data.pipe(writer);
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-      response.data.on('error', reject);
-    });
-
-    // Make sure we actually got something
-    if (!fs.existsSync(tempPath) || fs.statSync(tempPath).size === 0) {
-      throw new Error('Download produced an empty file — the video format may be unsupported.');
-    }
-
-    const captionHeader = response.headers['x-caption'];
-    const caption = captionHeader
-      ? decodeURIComponent(captionHeader)
-      : '🎬 Video downloaded via PocketAssist';
-
-    await sendVideo(phone, tempPath, caption);
-    return sendMessage(
-      phone,
-      '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.'
-    );
+    // ── Fallback: no usable files ─────────────────────────────────────────
+    throw new Error('Download failed — no video parts were received.');
 
   } catch (err) {
     console.error('[SocialDL error]', err.message);
