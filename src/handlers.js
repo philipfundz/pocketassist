@@ -24,7 +24,6 @@ const {
   handleFileConvert,
   handleMultiImageToPDF,
   handleWatermark,
-  handleESign,
   handleStickerCreator,
 } = require('./fileProcessor');
 
@@ -497,31 +496,31 @@ if (session.step === 'rewrite') {
       return;
     }
 
-    // 8 ── E-Sign (Premium)
-    if (text === '8' && !session.step) {
-      const { allowed, access: acc } = await canUseTools(phone, true);
-      if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      await setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
-      return sendMessage(phone, '✍️ *E-Sign*\n\nFirst, send me the *PDF* you want to sign:');
-    }
-    if (session.step === 'esign_pdf') {
-      if (!mediaUrl || !mediaType?.includes('pdf')) {
-        return sendMessage(phone, '📄 Please send a *PDF* file to sign.');
-      }
-      await setSession(phone, { menu: 'file', step: 'esign_sig', data: { pdfUrl: mediaUrl } });
-      return sendMessage(phone, '✅ PDF received!\n\nNow send me your *signature image*:\n_(Take a photo of your signature on white paper)_');
-    }
-    if (session.step === 'esign_sig') {
-      if (!mediaUrl || !mediaType?.includes('image')) {
-        return sendMessage(phone, '🖊️ Please send an *image* of your signature.');
-      }
-      const { allowed, access: acc } = await canUseTools(phone, true);
-      if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-      await incrementDailyCount(phone);
-      await handleESign(phone, session.data.pdfUrl, mediaUrl, sendMessage, sendDocument);
-      await setSession(phone, { menu: 'file', step: 'esign_pdf', data: {} });
-      return;
-    }
+    // 8 ── E-Sign Website (Premium)
+if (text === '8' && !session.step) {
+  const { allowed, access: acc } = await canUseTools(phone, true);
+  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+
+  await incrementDailyCount(phone);
+
+  return sendMessage(phone, 
+`✍️ *PocketAssist E-Sign*
+
+Sign your PDF documents easily using our dedicated E-Sign website.
+
+🌐 Open here:
+https://pocketassist-esign-frontend.onrender.com
+
+Before starting:
+✅ Have your PDF document ready
+✅ Create your signature inside the website
+✅ Keep your PocketAssist ID available if requested
+
+_No files are processed inside WhatsApp. Use the website above for the complete signing experience._
+
+⭐ Premium Feature`
+  );
+}
 
     // 9 ── Sticker Creator (Premium)
     if (text === '9' && !session.step) {

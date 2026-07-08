@@ -739,34 +739,7 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
   }
 };
 
-// ─── E-SIGN WEBSITE REDIRECT (Premium) ────────────────────────────────────────
-const handleESign = async (phone, sendMessage) => {
-  const ESIGN_URL = 'https://pocketassist-esign-frontend.onrender.com';
 
-  try {
-    return sendMessage(
-      phone,
-      `✍️ *PocketAssist E-Sign*\n━━━━━━━━━━━━━━\n\n` +
-      `Sign your documents quickly and securely using our E-Sign website.\n\n` +
-      `🔗 Open E-Sign here:\n${ESIGN_URL}\n\n` +
-      `📌 Before you start, prepare:\n\n` +
-      `✅ Your document (PDF recommended)\n` +
-      `✅ Your signature\n` +
-      `✅ Your PocketAssist ID (PA ID)\n\n` +
-      `💡 Tip: Use a clear signature image for the best signing experience.\n\n` +
-      `━━━━━━━━━━━━━━\n` +
-      `Complete everything on the website, then download your signed document.\n\n` +
-      `Type *0* 🔙 to go back`
-    );
-
-  } catch (err) {
-    console.error('E-Sign redirect error:', err.message);
-    return sendMessage(
-      phone,
-      '❌ Unable to open E-Sign right now. Please try again later.'
-    );
-  }
-};
 
 // ─── STICKER CREATOR (Premium) ───────────────────────────────────────────────
 const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, sendImage) => {
@@ -830,14 +803,13 @@ setInterval(() => {
 
 module.exports = {
   handleOCR,
-  handleVoiceTranscriber,
   handleURLShortener,
   handleQRCode,
+  handleVoiceTranscriber,
   handleWebpageReader,
   handleSocialDL,
   handleFileConvert,
   handleMultiImageToPDF,
   handleWatermark,
-  handleESign,
   handleStickerCreator,
 };
