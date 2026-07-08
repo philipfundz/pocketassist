@@ -584,7 +584,7 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
 };
 
 // ─── MULTI-IMAGE TO PDF ──────────────────────────────────────────────────────
-const MAX_IMAGES_PER_BATCH = 15;
+const MAX_IMAGES_PER_BATCH = 20;
 const MAX_IMAGE_DIMENSION = 1600;
 const JPEG_QUALITY = 75;
 
@@ -739,53 +739,32 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
   }
 };
 
-// ─── E-SIGN (Premium) ─────────────────────────────────────────────────────────
-const handleESign = async (phone, pdfUrl, signatureImageUrl, sendMessage, sendDocument) => {
-  await sendMessage(phone, '✍️ Adding your signature to the document...\n\n_This may take a moment ⏳_');
-  let pdfPath, sigPath, outputPath;
+// ─── E-SIGN WEBSITE REDIRECT (Premium) ────────────────────────────────────────
+const handleESign = async (phone, sendMessage) => {
+  const ESIGN_URL = 'https://pocketassist-esign-frontend.onrender.com';
+
   try {
-    const { PDFDocument } = require('pdf-lib');
+    return sendMessage(
+      phone,
+      `✍️ *PocketAssist E-Sign*\n━━━━━━━━━━━━━━\n\n` +
+      `Sign your documents quickly and securely using our E-Sign website.\n\n` +
+      `🔗 Open E-Sign here:\n${ESIGN_URL}\n\n` +
+      `📌 Before you start, prepare:\n\n` +
+      `✅ Your document (PDF recommended)\n` +
+      `✅ Your signature\n` +
+      `✅ Your PocketAssist ID (PA ID)\n\n` +
+      `💡 Tip: Use a clear signature image for the best signing experience.\n\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `Complete everything on the website, then download your signed document.\n\n` +
+      `Type *0* 🔙 to go back`
+    );
 
-    pdfPath = await downloadFile(pdfUrl, 'pdf');
-    sigPath = await downloadFile(signatureImageUrl, 'png');
-
-    const resizedSigPath = path.join(TEMP_DIR, `${uuidv4()}_sig_resized.png`);
-    await sharp(sigPath)
-      .resize(200, 80, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-      .png()
-      .toFile(resizedSigPath);
-    cleanup(sigPath);
-    sigPath = resizedSigPath;
-
-    const pdfBytes = fs.readFileSync(pdfPath);
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    const sigImageBytes = fs.readFileSync(sigPath);
-    const sigImage = await pdfDoc.embedPng(sigImageBytes);
-
-    const pages = pdfDoc.getPages();
-    const lastPage = pages[pages.length - 1];
-    const { width, height } = lastPage.getSize();
-
-    lastPage.drawImage(sigImage, {
-      x: width - 220,
-      y: 40,
-      width: 180,
-      height: 60,
-    });
-
-    outputPath = path.join(TEMP_DIR, `${uuidv4()}_signed.pdf`);
-    const signedPdfBytes = await pdfDoc.save();
-    fs.writeFileSync(outputPath, signedPdfBytes);
-
-    await sendDocument(phone, outputPath, 'signed_document.pdf', '✍️ *Document Signed!*\n\nYour signature has been added to the last page.');
-    return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another document.');
   } catch (err) {
-    console.error('E-Sign error:', err.message);
-    return sendMessage(phone, '❌ Signing failed. Make sure you sent a valid PDF.\n\nType *0* 🔙 to go back.');
-  } finally {
-    cleanup(pdfPath);
-    cleanup(sigPath);
-    cleanup(outputPath);
+    console.error('E-Sign redirect error:', err.message);
+    return sendMessage(
+      phone,
+      '❌ Unable to open E-Sign right now. Please try again later.'
+    );
   }
 };
 
