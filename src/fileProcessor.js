@@ -253,17 +253,18 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
   }
 };
 
-// ─── SOCIAL DOWNLOADER (drop-in replacement for the function in src/fileProcessor.js)
-// Fixes:
-//   1. Silent crashes when response.data stream errors mid-pipe
-//   2. JSON parse failure when body is unexpectedly not JSON
-//   3. Missing error message forwarding from the downloader microservice
-//   4. No user feedback when the download microservice itself is unreachable
+// ─── SOCIAL DOWNLOADER (updated for new pocketassist-downloader response shape)
+// New shape: { success, split, videoOnly, files: [{ url, part, total, description? }] }
+//   - description only present on files[0]
+//   - videoOnly: true means the Facebook DRM fallback kicked in (video, no audio)
+//   - file.url may be an absolute URL or a path relative to DOWNLOADER_URL — handled below
 
 const activeDownloads = new Set();
 
-const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filePath) => {
-  const response = await axios.get(`${DOWNLOADER_URL}${filePath}`, {
+const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, fileUrl) => {
+  const fullUrl = /^https?:\/\//i.test(fileUrl) ? fileUrl : `${DOWNLOADER_URL}${fileUrl}`;
+
+  const response = await axios.get(fullUrl, {
     headers: { 'x-auth-token': DOWNLOADER_TOKEN },
     responseType: 'stream',
     timeout: 600000,
@@ -272,7 +273,7 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filePath) => {
 
   if (response.status !== 200) {
     response.data.resume();
-    throw new Error(`Could not fetch video part "${filePath}" (HTTP ${response.status})`);
+    throw new Error(`Could not fetch video part "${fileUrl}" (HTTP ${response.status})`);
   }
 
   const partPath = path.join(TEMP_DIR, `${uuidv4()}_part.mp4`);
@@ -286,10 +287,31 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, filePath) => {
   });
 
   if (!fs.existsSync(partPath) || fs.statSync(partPath).size === 0) {
-    throw new Error(`Part file "${filePath}" was empty after download.`);
+    throw new Error(`Part file "${fileUrl}" was empty after download.`);
   }
 
   return partPath;
+};
+
+// Builds the caption for a given file in the response array
+const buildCaption = (file, index, body) => {
+  const lines = [];
+
+  if (body.videoOnly && index === 0) {
+    lines.push('⚠️ Audio unavailable for this video — sending video only.');
+  }
+
+  if (body.split && body.files.length > 1) {
+    lines.push(`🎬 Part ${file.part}/${file.total}`);
+  } else {
+    lines.push('🎬 Video downloaded via PocketAssist');
+  }
+
+  if (index === 0 && file.description) {
+    lines.push(file.description);
+  }
+
+  return lines.join('\n\n');
 };
 
 const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
@@ -306,8 +328,6 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
   activeDownloads.add(phone);
   await sendMessage(phone, '⬇️ Downloading... please wait ⏳');
-
-  let tempPath = null;
 
   try {
     const DOWNLOADER_URL = process.env.DOWNLOADER_URL;
@@ -349,20 +369,25 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       throw new Error(body?.error || `Download failed (HTTP ${response.status})`);
     }
 
-    // ── Success: single file ──────────────────────────────────────────────
-    if (!body.split && Array.isArray(body.files) && body.files.length === 1) {
+    if (!body.success || !Array.isArray(body.files) || body.files.length === 0) {
+      throw new Error('Download failed — no video parts were received.');
+    }
+
+    // ── Single file ─────────────────────────────────────────────────────
+    if (!body.split && body.files.length === 1) {
       let partPath = null;
       try {
-        partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, body.files[0]);
-        await sendVideo(phone, partPath, '🎬 Video downloaded via PocketAssist');
+        const file = body.files[0];
+        partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
+        await sendVideo(phone, partPath, buildCaption(file, 0, body));
       } finally {
         cleanup(partPath);
       }
       return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
     }
 
-    // ── Success: split files ──────────────────────────────────────────────
-    if (body.split && Array.isArray(body.files) && body.files.length > 0) {
+    // ── Split files ───────────────────────────────────────────────────────
+    if (body.split && body.files.length > 0) {
       await sendMessage(
         phone,
         `📦 Video is large — sending in ${body.files.length} part${body.files.length > 1 ? 's' : ''}...`
@@ -370,12 +395,10 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
       for (let i = 0; i < body.files.length; i++) {
         let partPath = null;
+        const file = body.files[i];
         try {
-          partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, body.files[i]);
-          const caption = body.files.length > 1
-            ? `🎬 Part ${i + 1}/${body.files.length}`
-            : '🎬 Video downloaded via PocketAssist';
-          await sendVideo(phone, partPath, caption);
+          partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
+          await sendVideo(phone, partPath, buildCaption(file, i, body));
         } catch (partErr) {
           console.error(`[SocialDL] Part ${i + 1} failed:`, partErr.message);
           await sendMessage(phone, `⚠️ Part ${i + 1} could not be sent: ${partErr.message}`);
@@ -391,8 +414,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
     }
 
-    // ── Fallback: no usable files ─────────────────────────────────────────
-    throw new Error('Download failed — no video parts were received.');
+    throw new Error('Download failed — unexpected response shape from downloader.');
 
   } catch (err) {
     console.error('[SocialDL error]', err.message);
@@ -409,10 +431,10 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     return sendMessage(phone, `${userMsg}\n\nType *0* 🔙 to go back.`);
 
   } finally {
-    cleanup(tempPath);
     activeDownloads.delete(phone);
   }
 };
+
 
 // ─── FILE CONVERTER (Local: sharp + pdf-lib + poppler-utils — no API key) ───
 const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];

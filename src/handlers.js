@@ -546,7 +546,7 @@ _No files are processed inside WhatsApp. Use the website above for the complete 
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
       await setSession(phone, { menu: 'file', step: 'socialdl', data: {} });
-      return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 10 min • Auto-compressed & split if large)_');
+      return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 15 min • Auto-compressed & split if large)_');
     }
     if (session.step === 'socialdl') {
       return handleSocialDL(phone, text, sendMessage, sendVideo);
@@ -712,7 +712,7 @@ if (session.step === 'imagegen') return;
   return sendMessage(phone, `🤖 I didn't understand that.\n\nType *MENU* to see all options or *HELP* for guidance.`);
 };
 
-// Export session step checker for queue system in index.js
+// Export session step checker for queue system in index.jsf
 const getSessionStep = async (phone) => {
   const session = await getSession(phone);
   return session.step || null;
