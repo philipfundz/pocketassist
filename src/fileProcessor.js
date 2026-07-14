@@ -389,9 +389,13 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     // ── Split files ───────────────────────────────────────────────────────
     if (body.split && body.files.length > 0) {
       await sendMessage(
-        phone,
-        `📦 Video is large — sending in ${body.files.length} part${body.files.length > 1 ? 's' : ''}...`
-      );
+  phone,
+  `⬇️ *This video is too large for WhatsApp.*
+
+📦 It will be sent in *${totalParts} part${totalParts > 1 ? 's' : ''}*.
+
+Please wait while I prepare the download...`
+);
 
       for (let i = 0; i < body.files.length; i++) {
         let partPath = null;

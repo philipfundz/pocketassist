@@ -549,8 +549,17 @@ _No files are processed inside WhatsApp. Use the website above for the complete 
       return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 15 min • Auto-compressed & split if large)_');
     }
     if (session.step === 'socialdl') {
-      return handleSocialDL(phone, text, sendMessage, sendVideo);
-    }
+  await sendMessage(
+    phone,
+    `⬇️ *Download started!*
+
+⏳ Please wait while I fetch and process your video.
+
+_Larger videos may take a little longer._`
+  );
+
+  return handleSocialDL(phone, text, sendMessage, sendVideo);
+}
 
     // 11 ── WhatsApp Link Generator (Free)
     if (text === '11' && !session.step) {
