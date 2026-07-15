@@ -595,14 +595,13 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
     return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
 
   } catch (err) {
-    console.error('Document convert error:', err.message);
-    let msg = '❌ Conversion failed. Please try again.\n\nType *0* 🔙 to go back.';
-    if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
-      msg = '⏱️ Conversion took too long and timed out. Try again in a moment.\n\nType *0* 🔙 to go back.';
-    } else if (err.message.includes('not supported')) {
-      msg = `❌ ${err.message}\n\nType *0* 🔙 to go back.`;
+    console.error('File convert error:', err.message);
+    console.error('File convert stack:', err.stack);
+    console.error('File convert details:', { mediaType, targetFormat });
+    if (err.message === 'PDFTOPPM_MISSING_OR_FAILED' || err.message === 'PDFTOPPM_OUTPUT_MISSING') {
+      return sendMessage(phone, '❌ PDF → Image conversion is unavailable on this server right now (poppler-utils missing or failed).\n\nType *0* 🔙 to go back.');
     }
-    return sendMessage(phone, msg);
+    return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* 🔙 to go back.');
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
