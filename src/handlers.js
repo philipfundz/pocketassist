@@ -379,19 +379,18 @@ if (session.step === 'rewrite') {
         const isImage = mediaType?.includes('image');
 
         if (isImage) {
-          if (images.length >= 15) {
-            return sendMessage(phone, `⚠️ Batch limit reached (15 images max).\n\nType *PDF* now to combine what you've sent, or *0* 🔙 to start over.`);
+          if (images.length >= 30) {
+           return sendMessage(phone, `⚠️ Batch limit reached (30 images max).\n\nType *PDF* now to combine what you've sent, or *0* 🔙 to start over.`);
           }
 
           images.push({ mediaUrl, mediaType });
           await setSession(phone, { menu: 'file', step: 'convert_file', data: { images } });
-
-          const remaining = 15 - images.length;
-          return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
+        const remaining = 30 - images.length;
+return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
         }
 
         await setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
-        return sendMessage(phone, `✅ File received!\n\nWhat format do you want to convert it to?\n\nExamples: *PDF, DOCX, JPG, PNG, XLSX*\n\nType the format name:`);
+        return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF (up to 30 images)._\n\n_Send your file now:_`); 
       }
 
       if (images.length === 0) {
