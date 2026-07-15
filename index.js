@@ -224,7 +224,7 @@ app.post('/webhook', async (req, res) => {
     if (msgType === 'text') {
       text = msg.text?.body || '';
     } else if (msgType === 'image') {
-      mediaType = 'image';
+      mediaType = msg.image?.mime_type || 'image/jpeg';
       mediaId = msg.image.id;
     } else if (msgType === 'audio') {
       mediaType = 'audio';
@@ -243,7 +243,6 @@ app.post('/webhook', async (req, res) => {
       const handled = await handleLinkCommand(phone, text, sendMessage);
       if (handled) return;
     }
-
     // ── Parallel DB calls ──────────────────────────────────────────────────
     const user = await getOrCreateUser(phone);
 
