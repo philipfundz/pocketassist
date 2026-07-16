@@ -254,10 +254,11 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
 };
 
 // ─── SOCIAL DOWNLOADER ────────────────────────────────────────────────────────
-// Response shape: { success, split, videoOnly, files: [{ url, part, total, description? }] }
-// FIX 1: removed duplicate "Downloading..." message — handlers.js sends the only pre-message
-// FIX 2: fixed totalParts ReferenceError — now uses body.files.length
-// FIX 3: "Type 0 to go back" folded into video caption, not a separate trailing message
+// Downloader is async: POST /download → 202 + jobId → poll GET /status/:jobId
+// FIX 1: removed duplicate "Downloading..." message — handlers.js owns the single pre-message
+// FIX 2: fixed totalParts ReferenceError — uses body.files.length
+// FIX 3: "Type 0 to go back" folded into video caption, not a trailing message
+// FIX 4 (this session): handle 202 async response — poll instead of expecting 200
 
 const activeDownloads = new Set();
 
@@ -294,7 +295,6 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, fileUrl) => {
 };
 
 // Builds the caption for a given file — includes "type 0" only on the last part
-// so there is no separate trailing message after the video(s).
 const buildCaption = (file, index, body) => {
   const lines = [];
 
@@ -312,7 +312,6 @@ const buildCaption = (file, index, body) => {
     lines.push(file.description);
   }
 
-  // Fold the nav hint into the last part's caption so no extra message is needed
   const isLastPart = index === body.files.length - 1;
   if (isLastPart) {
     lines.push('━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
@@ -334,8 +333,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   }
 
   activeDownloads.add(phone);
-  // NOTE: no "Downloading..." message here — handlers.js already sent "Download started!"
-  // before calling this function, keeping the pre-message count at exactly one.
+  // NOTE: no "Downloading..." message here — handlers.js already sent one before calling this.
 
   try {
     const DOWNLOADER_URL = process.env.DOWNLOADER_URL;
@@ -345,39 +343,90 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       throw new Error('Downloader service is not configured on this server.');
     }
 
-    // ── POST to downloader microservice ──────────────────────────────────
-    let response;
+    // ── POST to downloader — async queue returns 202 + jobId ──────────────
+    let jobId;
     try {
-      response = await axios.post(
+      const postRes = await axios.post(
         `${DOWNLOADER_URL}/download`,
         { url: url.trim() },
         {
           headers: { 'x-auth-token': DOWNLOADER_TOKEN },
-          timeout: 600000,
+          timeout: 30000,       // only waiting for job acceptance, not completion
           validateStatus: () => true,
         }
       );
+
+      const postBody = typeof postRes.data === 'string'
+        ? JSON.parse(postRes.data)
+        : postRes.data;
+
+      if (postRes.status !== 202 || !postBody?.jobId) {
+        throw new Error(postBody?.error || `Unexpected response from downloader (HTTP ${postRes.status})`);
+      }
+
+      jobId = postBody.jobId;
+      console.log(`[SocialDL] Job accepted: ${jobId}`);
+
     } catch (networkErr) {
       if (networkErr.code === 'ECONNABORTED' || networkErr.message.toLowerCase().includes('timeout')) {
-        throw new Error('Download timed out — please try a shorter clip.');
+        throw new Error('Could not reach the download service — please try again in a moment.');
+      }
+      // re-throw our own "Unexpected response" errors directly
+      if (networkErr.message.startsWith('Unexpected response') || networkErr.message.startsWith('Downloader')) {
+        throw networkErr;
       }
       throw new Error('Could not reach the download service. Please try again in a moment.');
     }
 
-    // ── Parse JSON response ───────────────────────────────────────────────
+    // ── Poll GET /status/:jobId until done or failed (max 6 min) ─────────
+    const MAX_POLLS = 72;           // 72 × 5 s = 6 min
+    const POLL_INTERVAL_MS = 5000;
     let body;
-    try {
-      body = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-    } catch (parseErr) {
-      throw new Error('Received an unexpected response from the download service.');
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+      try {
+        const pollRes = await axios.get(`${DOWNLOADER_URL}/status/${jobId}`, {
+          headers: { 'x-auth-token': DOWNLOADER_TOKEN },
+          timeout: 10000,
+          validateStatus: () => true,
+        });
+
+        const data = typeof pollRes.data === 'string'
+          ? JSON.parse(pollRes.data)
+          : pollRes.data;
+
+        console.log(`[SocialDL] Poll ${i + 1}/${MAX_POLLS} — status: ${data.status}`);
+
+        if (data.status === 'done') {
+          body = data;
+          break;
+        }
+
+        if (data.status === 'failed') {
+          throw new Error(data.error || 'Download failed on the server.');
+        }
+
+        // 'queued' or 'processing' — keep waiting
+
+      } catch (pollErr) {
+        // only re-throw intentional failures, not transient network hiccups
+        if (
+          pollErr.message.includes('failed on the server') ||
+          pollErr.message.includes('Download failed')
+        ) {
+          throw pollErr;
+        }
+        console.warn(`[SocialDL] Poll ${i + 1} network hiccup — retrying:`, pollErr.message);
+      }
     }
 
-    // ── Non-200: surface error message from downloader ────────────────────
-    if (response.status !== 200) {
-      throw new Error(body?.error || `Download failed (HTTP ${response.status})`);
+    if (!body) {
+      throw new Error('Download timed out — the video may be too long or the platform is slow right now. Try a shorter clip.');
     }
 
-    if (!body.success || !Array.isArray(body.files) || body.files.length === 0) {
+    if (!Array.isArray(body.files) || body.files.length === 0) {
       throw new Error('Download failed — no video parts were received.');
     }
 
@@ -387,7 +436,6 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       try {
         const file = body.files[0];
         partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
-        // Caption includes "type 0" hint — no trailing sendMessage needed
         await sendVideo(phone, partPath, buildCaption(file, 0, body));
       } finally {
         cleanup(partPath);
@@ -397,7 +445,6 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
     // ── Split files ───────────────────────────────────────────────────────
     if (body.split && body.files.length > 0) {
-      // FIX: was `totalParts` (undefined) — now correctly reads body.files.length
       const totalParts = body.files.length;
       await sendMessage(
         phone,
@@ -409,7 +456,6 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
         const file = body.files[i];
         try {
           partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
-          // buildCaption appends "type 0" hint on the last part automatically
           await sendVideo(phone, partPath, buildCaption(file, i, body));
         } catch (partErr) {
           console.error(`[SocialDL] Part ${i + 1} failed:`, partErr.message);
