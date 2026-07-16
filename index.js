@@ -7,7 +7,7 @@ const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
 const { onboardingFlow, handleLinkCommand } = require('./src/onboarding');
 const { handleMessage, getSessionStep } = require('./src/handlers');
-const { createMonnifyWebhookHandler } = require('./payment');
+const { createMonnifyWebhookHandler } = require('./src/payment');
 
 const app = express();
 app.use(express.json({
