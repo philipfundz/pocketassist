@@ -7,9 +7,12 @@ const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
 const { onboardingFlow, handleLinkCommand } = require('./src/onboarding');
 const { handleMessage, getSessionStep } = require('./src/handlers');
+const { handleMonnifyWebhook } = require('./payment');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf.toString(); }
+}));
 
 const PORT = process.env.PORT || 3000;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -243,6 +246,8 @@ app.post('/webhook', async (req, res) => {
       const handled = await handleLinkCommand(phone, text, sendMessage);
       if (handled) return;
     }
+     
+    
     // ── Parallel DB calls ──────────────────────────────────────────────────
     const user = await getOrCreateUser(phone);
 
@@ -289,6 +294,8 @@ app.post('/webhook', async (req, res) => {
     console.error(err.stack);
   }
 });
+
+app.post('/webhooks/monnify', handleMonnifyWebhook);
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 
