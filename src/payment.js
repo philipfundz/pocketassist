@@ -1,6 +1,5 @@
 const { sha512 } = require('js-sha512');
-const { supabase } = require('./src/database'); // adjust if your export name differs
-
+const { supabase } = require('./database');
 const MONNIFY_CLIENT_SECRET = process.env.MONNIFY_CLIENT_SECRET;
 
 // --- Verify Monnify actually sent this webhook ---
