@@ -7,7 +7,7 @@ const { getOrCreateUser, checkAndResetDaily } = require('./src/database');
 const { checkAccess } = require('./src/auth');
 const { onboardingFlow, handleLinkCommand } = require('./src/onboarding');
 const { handleMessage, getSessionStep } = require('./src/handlers');
-const { handleMonnifyWebhook } = require('./payment');
+const { createMonnifyWebhookHandler } = require('./payment');
 
 const app = express();
 app.use(express.json({
@@ -295,6 +295,7 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
+const handleMonnifyWebhook = createMonnifyWebhookHandler(sendMessage);
 app.post('/webhooks/monnify', handleMonnifyWebhook);
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
