@@ -83,7 +83,6 @@ Unlock powerful premium tools!
 
 💰 *Pricing*
 - ₦1,000/month
-- ₦5,000/year _(5 months free!)_
 
 ✅ *Premium tools include:*
 - Translator
@@ -94,7 +93,14 @@ Unlock powerful premium tools!
 - Social Downloader
 - Watermark, E-Sign & more!
 
-_(Monnify payment coming soon)_
+👉 *Pay here:* https://paylink.monnify.com/GxouFr
+
+⚠️ *IMPORTANT:* In the payment form's Name field, type your WhatsApp number exactly like this:
+*234XXXXXXXXXX*
+
+_(This is how we activate your premium — without it we can't match your payment automatically.)_
+
+Takes effect within seconds of payment ✅
 ━━━━━━━━━━━━━━
 Type *BACK* to return to menu`;
 
