@@ -253,11 +253,11 @@ const handleWebpageReader = async (phone, url, sendMessage) => {
   }
 };
 
-// ─── SOCIAL DOWNLOADER (updated for new pocketassist-downloader response shape)
-// New shape: { success, split, videoOnly, files: [{ url, part, total, description? }] }
-//   - description only present on files[0]
-//   - videoOnly: true means the Facebook DRM fallback kicked in (video, no audio)
-//   - file.url may be an absolute URL or a path relative to DOWNLOADER_URL — handled below
+// ─── SOCIAL DOWNLOADER ────────────────────────────────────────────────────────
+// Response shape: { success, split, videoOnly, files: [{ url, part, total, description? }] }
+// FIX 1: removed duplicate "Downloading..." message — handlers.js sends the only pre-message
+// FIX 2: fixed totalParts ReferenceError — now uses body.files.length
+// FIX 3: "Type 0 to go back" folded into video caption, not a separate trailing message
 
 const activeDownloads = new Set();
 
@@ -293,7 +293,8 @@ const fetchPart = async (DOWNLOADER_URL, DOWNLOADER_TOKEN, fileUrl) => {
   return partPath;
 };
 
-// Builds the caption for a given file in the response array
+// Builds the caption for a given file — includes "type 0" only on the last part
+// so there is no separate trailing message after the video(s).
 const buildCaption = (file, index, body) => {
   const lines = [];
 
@@ -309,6 +310,12 @@ const buildCaption = (file, index, body) => {
 
   if (index === 0 && file.description) {
     lines.push(file.description);
+  }
+
+  // Fold the nav hint into the last part's caption so no extra message is needed
+  const isLastPart = index === body.files.length - 1;
+  if (isLastPart) {
+    lines.push('━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
   }
 
   return lines.join('\n\n');
@@ -327,7 +334,8 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
   }
 
   activeDownloads.add(phone);
-  await sendMessage(phone, '⬇️ Downloading... please wait ⏳');
+  // NOTE: no "Downloading..." message here — handlers.js already sent "Download started!"
+  // before calling this function, keeping the pre-message count at exactly one.
 
   try {
     const DOWNLOADER_URL = process.env.DOWNLOADER_URL;
@@ -373,35 +381,35 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       throw new Error('Download failed — no video parts were received.');
     }
 
-    // ── Single file ─────────────────────────────────────────────────────
+    // ── Single file ───────────────────────────────────────────────────────
     if (!body.split && body.files.length === 1) {
       let partPath = null;
       try {
         const file = body.files[0];
         partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
+        // Caption includes "type 0" hint — no trailing sendMessage needed
         await sendVideo(phone, partPath, buildCaption(file, 0, body));
       } finally {
         cleanup(partPath);
       }
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
+      return;
     }
 
     // ── Split files ───────────────────────────────────────────────────────
     if (body.split && body.files.length > 0) {
+      // FIX: was `totalParts` (undefined) — now correctly reads body.files.length
+      const totalParts = body.files.length;
       await sendMessage(
-  phone,
-  `⬇️ *This video is too large for WhatsApp.*
-
-📦 It will be sent in *${totalParts} part${totalParts > 1 ? 's' : ''}*.
-
-Please wait while I prepare the download...`
-);
+        phone,
+        `📦 This video is too large for WhatsApp in one piece.\n\nIt will be sent in *${totalParts} part${totalParts > 1 ? 's' : ''}* — please wait...`
+      );
 
       for (let i = 0; i < body.files.length; i++) {
         let partPath = null;
         const file = body.files[i];
         try {
           partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
+          // buildCaption appends "type 0" hint on the last part automatically
           await sendVideo(phone, partPath, buildCaption(file, i, body));
         } catch (partErr) {
           console.error(`[SocialDL] Part ${i + 1} failed:`, partErr.message);
@@ -415,7 +423,7 @@ Please wait while I prepare the download...`
         }
       }
 
-      return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or paste another link.');
+      return;
     }
 
     throw new Error('Download failed — unexpected response shape from downloader.');
@@ -595,13 +603,14 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
     return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another file to convert.');
 
   } catch (err) {
-    console.error('File convert error:', err.message);
-    console.error('File convert stack:', err.stack);
-    console.error('File convert details:', { mediaType, targetFormat });
-    if (err.message === 'PDFTOPPM_MISSING_OR_FAILED' || err.message === 'PDFTOPPM_OUTPUT_MISSING') {
-      return sendMessage(phone, '❌ PDF → Image conversion is unavailable on this server right now (poppler-utils missing or failed).\n\nType *0* 🔙 to go back.');
+    console.error('Document convert error:', err.message);
+    let msg = '❌ Conversion failed. Please try again.\n\nType *0* 🔙 to go back.';
+    if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timeout')) {
+      msg = '⏱️ Conversion took too long and timed out. Try again in a moment.\n\nType *0* 🔙 to go back.';
+    } else if (err.message.includes('not supported')) {
+      msg = `❌ ${err.message}\n\nType *0* 🔙 to go back.`;
     }
-    return sendMessage(phone, '❌ Conversion failed. Please try again.\n\nMake sure your file is not corrupted.\n\nType *0* 🔙 to go back.');
+    return sendMessage(phone, msg);
   } finally {
     cleanup(inputPath);
     cleanup(outputPath);
@@ -609,7 +618,7 @@ const handleDocumentConvert = async (phone, mediaUrl, inputExt, target, sendMess
 };
 
 // ─── MULTI-IMAGE TO PDF ──────────────────────────────────────────────────────
-const MAX_IMAGES_PER_BATCH = 20;
+const MAX_IMAGES_PER_BATCH = 30;
 const MAX_IMAGE_DIMENSION = 1600;
 const JPEG_QUALITY = 75;
 
@@ -764,8 +773,6 @@ const handleWatermark = async (phone, mediaUrl, mediaType, sendMessage, sendImag
   }
 };
 
-
-
 // ─── STICKER CREATOR (Premium) ───────────────────────────────────────────────
 const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, sendImage) => {
   await sendMessage(phone, '🎨 Creating your sticker...');
@@ -795,7 +802,7 @@ const handleStickerCreator = async (phone, mediaUrl, sendMessage, sendSticker, s
       await sendImage(phone, outputPath, '🎨 Your sticker (WebP format)');
       return sendMessage(phone, '━━━━━━━━━━━━━━\nType *0* 🔙 to go back or send another image.');
     }
-    
+
   } catch (err) {
     console.error('Sticker error:', err.message);
     return sendMessage(phone, '❌ Sticker creation failed. Please send a clear image and try again.\n\nType *0* 🔙 to go back.');

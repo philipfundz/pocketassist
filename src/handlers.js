@@ -114,7 +114,7 @@ Keep responses under 400 words.`;
   const wrappedQuestion = question && question.trim()
     ? `TASK: ${userQuestion}\nDo not describe the image. Answer or solve directly.`
     : `If this image has a question or problem, solve it. If not, describe it.`;
-  
+
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
@@ -197,16 +197,13 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
       try {
         if (mediaUrl && mediaType?.includes('image')) {
-          // Image question
           answer = await askGeminiVision(mediaUrl, text || 'What is in this image?', history);
           userEntry = { role: 'user', content: text ? `[Image] ${text}` : '[Image]' };
         } else {
-          // Text question with history
           answer = await askGeminiChat(history, text);
           userEntry = { role: 'user', content: text };
         }
 
-        // Save history (keep last 10 messages = 5 exchanges)
         history.push(userEntry);
         history.push({ role: 'assistant', content: answer });
         const trimmed = history.slice(-10);
@@ -215,7 +212,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
         await incrementDailyCount(phone);
 
         return sendMessage(phone, `💡 *Answer:*\n\n${answer}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nAsk a follow-up, send another image, or type *0* 🔙 to go back`);
-      
+
       } catch (err) {
         console.error('[AI Q&A Error]', err.message);
         console.error('[AI Q&A Detail]', JSON.stringify(err.response?.data));
@@ -247,7 +244,7 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
 
         return sendMessage(phone, `💬 *Smart Reply Options:*\n\n${replies}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another message or type *0* 🔙 to go back`);
       } catch (err) {
-        console.error('[AI Q&A Error]', err.message);
+        console.error('[Smart Reply Error]', err.message);
         if (err.message && err.message.includes('429')) {
           return sendMessage(phone, '⏳ AI is getting a lot of requests right now and has hit its daily limit.\n\nPlease try again in a few minutes.\n\nType *0* 🔙 to go back.');
         }
@@ -298,26 +295,26 @@ const handleMessage = async (phone, message, mediaUrl, mediaType, sendMessage, s
     }
 
     // 5 ── Plagiarism Rewriter (Premium)
-if (text === '5' && !session.step) {
-  const { allowed, access: acc } = await canUseTools(phone, true);
-  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-  await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
-  return sendMessage(phone, '✏️ *Plagiarism Rewriter*\n\nPaste the text you want rewritten:\n\n_Type *0* 🔙 to go back_');
-}
-if (session.step === 'rewrite') {
-  const { allowed, access: acc } = await canUseTools(phone, true);
-  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
-  await sendMessage(phone, '✏️ Rewriting...');
-  try {
-    const rewritten = await askGemini(PROMPTS.plagiarismRewriter(text));
-    await incrementDailyCount(phone);
-    await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
-    return sendMessage(phone, `✏️ *Rewritten Text:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another text or type *0* 🔙 to go back`);
-  } catch (err) {
-    console.error('[Rewriter Error]', err.message);
-    return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
-  }
-}
+    if (text === '5' && !session.step) {
+      const { allowed, access: acc } = await canUseTools(phone, true);
+      if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+      await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
+      return sendMessage(phone, '✏️ *Plagiarism Rewriter*\n\nPaste the text you want rewritten:\n\n_Type *0* 🔙 to go back_');
+    }
+    if (session.step === 'rewrite') {
+      const { allowed, access: acc } = await canUseTools(phone, true);
+      if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+      await sendMessage(phone, '✏️ Rewriting...');
+      try {
+        const rewritten = await askGemini(PROMPTS.plagiarismRewriter(text));
+        await incrementDailyCount(phone);
+        await setSession(phone, { menu: 'ai', step: 'rewrite', data: {} });
+        return sendMessage(phone, `✏️ *Rewritten Text:*\n\n${rewritten}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nPaste another text or type *0* 🔙 to go back`);
+      } catch (err) {
+        console.error('[Rewriter Error]', err.message);
+        return sendMessage(phone, '❌ Something went wrong. Please try again.\n\nType *0* 🔙 to go back.');
+      }
+    }
 
     // 6 ── AI Image Generator (Premium)
     if (text === '6' && !session.step) {
@@ -338,9 +335,8 @@ if (session.step === 'rewrite') {
         fs.writeFileSync(tempPath, Buffer.from(imageResponse.data));
         await incrementDailyCount(phone);
         await sendImage(phone, tempPath, `🎨 *Here's your image!*\n\n_Prompt: ${text.substring(0, 100)}_\n\n━━━━━━━━━━━━━━\nDescribe another image or type *0* 🔙 to go back`);
-        fs.unlinkSync(tempPath);
-        fs.unlinkSync(tempPath);
-        return; // ← add this
+        try { fs.unlinkSync(tempPath); } catch (e) {}
+        return;
       } catch (err) {
         console.error('[ImageGen Error]', err.message);
         return sendMessage(phone, '❌ Image generation failed. Please try again.\n\nType *0* 🔙 to go back.');
@@ -370,7 +366,7 @@ if (session.step === 'rewrite') {
     // 2 ── File Convert (Free)
     if (text === '2' && !session.step) {
       await setSession(phone, { menu: 'file', step: 'convert_file', data: { images: [] } });
-      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF._\n\n_Send your file now:_`);
+      return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF (up to 30 images)._\n\n_Send your file now:_`);
     }
     if (session.step === 'convert_file') {
       const images = session.data.images || [];
@@ -380,17 +376,20 @@ if (session.step === 'rewrite') {
 
         if (isImage) {
           if (images.length >= 30) {
-           return sendMessage(phone, `⚠️ Batch limit reached (30 images max).\n\nType *PDF* now to combine what you've sent, or *0* 🔙 to start over.`);
+            return sendMessage(phone, `⚠️ Batch limit reached (30 images max).\n\nType *PDF* now to combine what you've sent, or *0* 🔙 to start over.`);
           }
 
           images.push({ mediaUrl, mediaType });
           await setSession(phone, { menu: 'file', step: 'convert_file', data: { images } });
-        const remaining = 30 - images.length;
-return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
+
+          const remaining = 30 - images.length;
+          return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more images to add to the batch (${remaining} more allowed), or type the target format (e.g. *PDF*, *JPG*, *PNG*) to convert now.`);
         }
 
+        // FIX: non-image file — correctly transition to convert_format step
+        // (was incorrectly re-sending the file converter intro message)
         await setSession(phone, { menu: 'file', step: 'convert_format', data: { mediaUrl, mediaType } });
-        return sendMessage(phone, `🔄 *File Converter*\n\nSend me the file you want to convert.\n\n*Supported conversions:*\n• DOCX/PPTX/XLSX → PDF\n• PDF → DOCX\n• Images (JPG/PNG/WEBP) ↔ each other, or → PDF\n\n_Tip: send multiple images one after another to combine them into a single PDF (up to 30 images)._\n\n_Send your file now:_`); 
+        return sendMessage(phone, `✅ File received!\n\nWhat format do you want to convert it to?\n\nExamples: *PDF, DOCX, JPG, PNG, XLSX*\n\nType the format name:`);
       }
 
       if (images.length === 0) {
@@ -496,13 +495,13 @@ return sendMessage(phone, `✅ Image ${images.length} received.\n\nSend more ima
     }
 
     // 8 ── E-Sign Website (Premium)
-if (text === '8' && !session.step) {
-  const { allowed, access: acc } = await canUseTools(phone, true);
-  if (!allowed) return sendMessage(phone, guardMessage(acc, true));
+    if (text === '8' && !session.step) {
+      const { allowed, access: acc } = await canUseTools(phone, true);
+      if (!allowed) return sendMessage(phone, guardMessage(acc, true));
 
-  await incrementDailyCount(phone);
+      await incrementDailyCount(phone);
 
-  return sendMessage(phone, 
+      return sendMessage(phone,
 `✍️ *PocketAssist E-Sign*
 
 Sign your PDF documents easily using our dedicated E-Sign website.
@@ -518,8 +517,8 @@ Before starting:
 _No files are processed inside WhatsApp. Use the website above for the complete signing experience._
 
 ⭐ Premium Feature`
-  );
-}
+      );
+    }
 
     // 9 ── Sticker Creator (Premium)
     if (text === '9' && !session.step) {
@@ -548,17 +547,14 @@ _No files are processed inside WhatsApp. Use the website above for the complete 
       return sendMessage(phone, '⬇️ *Social Downloader*\n\nPaste the video link:\nSupports: YouTube Shorts, TikTok, Instagram, Twitter/X, Facebook\n_(Max 15 min • Auto-compressed & split if large)_');
     }
     if (session.step === 'socialdl') {
-  await sendMessage(
-    phone,
-    `⬇️ *Download started!*
-
-⏳ Please wait while I fetch and process your video.
-
-_Larger videos may take a little longer._`
-  );
-
-  return handleSocialDL(phone, text, sendMessage, sendVideo);
-}
+      // FIX: this is the ONE AND ONLY pre-message before the download.
+      // handleSocialDL no longer sends its own "Downloading..." message.
+      await sendMessage(
+        phone,
+        `⬇️ *Download started!*\n\n⏳ Please wait while I fetch and process your video.\n\n_Larger videos may take a little longer._`
+      );
+      return handleSocialDL(phone, text, sendMessage, sendVideo);
+    }
 
     // 11 ── WhatsApp Link Generator (Free)
     if (text === '11' && !session.step) {
@@ -639,7 +635,7 @@ _Larger videos may take a little longer._`
       return sendMessage(phone, `📄 *Your CV:*\n━━━━━━━━━━━━━━\n\n${cv}\n\n_${acc.isPremium ? '⭐ Premium' : `${acc.remainingFree - 1} free uses left today`}_\n\n━━━━━━━━━━━━━━\nType *2* to build another or *0* 🔙 to go back`);
     }
 
-    // 3 ── Assignment Writer (Premium) — now supports a photo of the question
+    // 3 ── Assignment Writer (Premium)
     if (text === '3' && !session.step) {
       const { allowed, access: acc } = await canUseTools(phone, true);
       if (!allowed) return sendMessage(phone, guardMessage(acc, true));
@@ -716,11 +712,11 @@ _Larger videos may take a little longer._`
   }
 
   // ─── FALLBACK ──────────────────────────────────────────────────────────────
-if (session.step === 'imagegen') return;
+  if (session.step === 'imagegen') return;
   return sendMessage(phone, `🤖 I didn't understand that.\n\nType *MENU* to see all options or *HELP* for guidance.`);
 };
 
-// Export session step checker for queue system in index.jsf
+// Export session step checker for queue system in index.js
 const getSessionStep = async (phone) => {
   const session = await getSession(phone);
   return session.step || null;
