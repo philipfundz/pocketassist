@@ -399,9 +399,10 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
         console.log(`[SocialDL] Poll ${i + 1}/${MAX_POLLS} — status: ${data.status}`);
 
-        if (data.status === 'completed') {
+                if (data.status === 'completed') {
           body = data;
           console.log(`[SocialDL] Job ${jobId} completed — ${data.files?.length || 0} file(s)`);
+          console.log(`[SocialDL] DEBUG body:`, JSON.stringify(body, null, 2));
           break;
         }
 
@@ -433,12 +434,16 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
     }
 
     // ── Single file ───────────────────────────────────────────────────────
-    if (!body.split && body.files.length === 1) {
+        if (!body.split && body.files.length === 1) {
+      console.log(`[SocialDL] DEBUG entering single-file path, files:`, body.files);
       let partPath = null;
       try {
         const file = body.files[0];
+        console.log(`[SocialDL] DEBUG fetching:`, file.url);
         partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
+        console.log(`[SocialDL] DEBUG fetched to:`, partPath);
         await sendVideo(phone, partPath, buildCaption(file, 0, body));
+        console.log(`[SocialDL] DEBUG sendVideo done`);
       } finally {
         cleanup(partPath);
       }
@@ -492,8 +497,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
     throw new Error('Download failed — unexpected response shape from downloader.');
 
-  } catch (err) {
-    console.error('[SocialDL error]', err.message);
+    } catch (err) {
+    console.error(`[SocialDL] DEBUG catch reached, err:`, err);
+    console.error('[SocialDL error]', err?.message || err);
 
     let userMsg;
     if (err.code === 'ECONNABORTED' || err.message.toLowerCase().includes('timed out') || err.message.toLowerCase().includes('timeout')) {
