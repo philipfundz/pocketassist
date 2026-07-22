@@ -51,17 +51,27 @@ const enqueueJob = (phone, run, sendMessage, position) => {
 
 // ─── SEND FUNCTIONS ───────────────────────────────────────────────────────────
 
-const sendMessage = async (phone, text) => {
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'text',
-      text: { body: text }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+const sendMessage = async (phone, text, retries = 1) => {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'text',
+        text: { body: text }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error(`[sendMessage error] phone=${phone}:`, err.message);
+    if (retries > 0 && (err.response?.status >= 500 || err.code === 'ECONNABORTED' || !err.response)) {
+      console.log(`[sendMessage] Retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1500));
+      return sendMessage(phone, text, retries - 1);
+    }
+    throw err;
+  }
 };
 
 const sendImageUrl = async (phone, imageUrl, caption = '') => {
@@ -77,108 +87,148 @@ const sendImageUrl = async (phone, imageUrl, caption = '') => {
   );
 };
 
-const sendImage = async (phone, imagePath, caption = '') => {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(imagePath));
-  form.append('messaging_product', 'whatsapp');
-  form.append('type', 'image/png');
+const sendImage = async (phone, imagePath, caption = '', retries = 1) => {
+  try {
+    const form = new FormData();
+    form.append('file', fs.createReadStream(imagePath));
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'image/png');
 
-  const uploadRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    form,
-    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+      form,
+      { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
 
-  const mediaId = uploadRes.data.id;
+    const mediaId = uploadRes.data.id;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'image',
-      image: { id: mediaId, caption }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'image',
+        image: { id: mediaId, caption }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error(`[sendImage error] phone=${phone} path=${imagePath}:`, err.message);
+    if (retries > 0 && (err.response?.status >= 500 || err.code === 'ECONNABORTED' || !err.response)) {
+      console.log(`[sendImage] Retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1500));
+      return sendImage(phone, imagePath, caption, retries - 1);
+    }
+    throw err;
+  }
 };
 
-const sendVideo = async (phone, videoPath, caption = '') => {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(videoPath));
-  form.append('messaging_product', 'whatsapp');
-  form.append('type', 'video/mp4');
+const sendVideo = async (phone, videoPath, caption = '', retries = 1) => {
+  try {
+    const form = new FormData();
+    form.append('file', fs.createReadStream(videoPath));
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'video/mp4');
 
-  const uploadRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    form,
-    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+      form,
+      { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
 
-  const mediaId = uploadRes.data.id;
+    const mediaId = uploadRes.data.id;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'video',
-      video: { id: mediaId, caption }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'video',
+        video: { id: mediaId, caption }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error(`[sendVideo error] phone=${phone} path=${videoPath}:`, err.message);
+    if (retries > 0 && (err.response?.status >= 500 || err.code === 'ECONNABORTED' || !err.response)) {
+      console.log(`[sendVideo] Retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1500));
+      return sendVideo(phone, videoPath, caption, retries - 1);
+    }
+    throw err;
+  }
 };
 
-const sendDocument = async (phone, filePath, filename, caption = '') => {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(filePath), filename);
-  form.append('messaging_product', 'whatsapp');
-  form.append('type', 'application/octet-stream');
+const sendDocument = async (phone, filePath, filename, caption = '', retries = 1) => {
+  try {
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePath), filename);
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'application/octet-stream');
 
-  const uploadRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    form,
-    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+      form,
+      { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
 
-  const mediaId = uploadRes.data.id;
+    const mediaId = uploadRes.data.id;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'document',
-      document: { id: mediaId, filename, caption }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'document',
+        document: { id: mediaId, filename, caption }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error(`[sendDocument error] phone=${phone} path=${filePath}:`, err.message);
+    if (retries > 0 && (err.response?.status >= 500 || err.code === 'ECONNABORTED' || !err.response)) {
+      console.log(`[sendDocument] Retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1500));
+      return sendDocument(phone, filePath, filename, caption, retries - 1);
+    }
+    throw err;
+  }
 };
 
-const sendSticker = async (phone, stickerPath) => {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(stickerPath));
-  form.append('messaging_product', 'whatsapp');
-  form.append('type', 'image/webp');
+const sendSticker = async (phone, stickerPath, retries = 1) => {
+  try {
+    const form = new FormData();
+    form.append('file', fs.createReadStream(stickerPath));
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'image/webp');
 
-  const uploadRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    form,
-    { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+      form,
+      { headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
 
-  const mediaId = uploadRes.data.id;
+    const mediaId = uploadRes.data.id;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'sticker',
-      sticker: { id: mediaId }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'sticker',
+        sticker: { id: mediaId }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error(`[sendSticker error] phone=${phone} path=${stickerPath}:`, err.message);
+    if (retries > 0 && (err.response?.status >= 500 || err.code === 'ECONNABORTED' || !err.response)) {
+      console.log(`[sendSticker] Retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1500));
+      return sendSticker(phone, stickerPath, retries - 1);
+    }
+    throw err;
+  }
 };
 
 const getMediaUrl = async (mediaId) => {

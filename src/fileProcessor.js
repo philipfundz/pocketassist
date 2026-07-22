@@ -378,9 +378,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       throw new Error('Could not reach the download service. Please try again in a moment.');
     }
 
-    // ── Poll GET /status/:jobId until done or failed (max 6 min) ─────────
-    const MAX_POLLS = 72;           // 72 × 5 s = 6 min
-    const POLL_INTERVAL_MS = 5000;
+        // ── Poll GET /status/:jobId until done or failed (max 6 min) ─────────
+    const MAX_POLLS = 180;          // 180 × 2 s = 6 min
+    const POLL_INTERVAL_MS = 2000;
     let body;
 
     for (let i = 0; i < MAX_POLLS; i++) {
@@ -399,8 +399,9 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
 
         console.log(`[SocialDL] Poll ${i + 1}/${MAX_POLLS} — status: ${data.status}`);
 
-        if (data.status === 'done') {
+        if (data.status === 'completed') {
           body = data;
+          console.log(`[SocialDL] Job ${jobId} completed — ${data.files?.length || 0} file(s)`);
           break;
         }
 
@@ -421,6 +422,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
         console.warn(`[SocialDL] Poll ${i + 1} network hiccup — retrying:`, pollErr.message);
       }
     }
+
 
     if (!body) {
       throw new Error('Download timed out — the video may be too long or the platform is slow right now. Try a shorter clip.');
@@ -443,7 +445,7 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
       return;
     }
 
-    // ── Split files ───────────────────────────────────────────────────────
+        // ── Split files ───────────────────────────────────────────────────────
     if (body.split && body.files.length > 0) {
       const totalParts = body.files.length;
       await sendMessage(
@@ -451,15 +453,31 @@ const handleSocialDL = async (phone, url, sendMessage, sendVideo) => {
         `📦 This video is too large for WhatsApp in one piece.\n\nIt will be sent in *${totalParts} part${totalParts > 1 ? 's' : ''}* — please wait...`
       );
 
+      // Prefetch all parts in parallel
+      console.log(`[SocialDL] Prefetching ${totalParts} parts in parallel...`);
+      const partPaths = await Promise.all(
+        body.files.map((file) =>
+          fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url).catch((err) => {
+            console.error(`[SocialDL] Prefetch failed for ${file.url}:`, err.message);
+            return null;
+          })
+        )
+      );
+
       for (let i = 0; i < body.files.length; i++) {
-        let partPath = null;
+        const partPath = partPaths[i];
         const file = body.files[i];
+
+        if (!partPath) {
+          await sendMessage(phone, `⚠️ Part ${i + 1} could not be downloaded.`);
+          continue;
+        }
+
         try {
-          partPath = await fetchPart(DOWNLOADER_URL, DOWNLOADER_TOKEN, file.url);
           await sendVideo(phone, partPath, buildCaption(file, i, body));
-        } catch (partErr) {
-          console.error(`[SocialDL] Part ${i + 1} failed:`, partErr.message);
-          await sendMessage(phone, `⚠️ Part ${i + 1} could not be sent: ${partErr.message}`);
+        } catch (sendErr) {
+          console.error(`[SocialDL] Part ${i + 1} send failed:`, sendErr.message);
+          await sendMessage(phone, `⚠️ Part ${i + 1} could not be sent: ${sendErr.message}`);
         } finally {
           cleanup(partPath);
         }
